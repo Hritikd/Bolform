@@ -24,13 +24,13 @@ export const useImportForm = () => {
 
 export const useTranscribeAudio = () => {
   return useMutation({
-    mutationFn: async ({ blob, language }: { blob: Blob; language: string }) => {
+    mutationFn: async ({ blob }: { blob: Blob; language: string }) => {
       const response = await fetch('/api/bolform/transcribe', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/octet-stream',
           'X-Audio-Mime': blob.type || 'audio/webm',
-          'X-Language': language,
+          'X-Language': 'auto',
         },
         body: blob,
       });

@@ -11,6 +11,31 @@ import { VoiceOrb, type VoiceState } from "../components/voice-orb";
 import { cn } from "../lib/utils";
 
 type SessionState = "setup" | "orientation" | "workspace" | "review";
+type LanguageMode = "auto" | ConversationInputLanguage;
+
+const HINDI_FIELD_QUESTIONS: Record<string, string> = {
+  student_name: "विद्यार्थी का पूरा नाम क्या है?",
+  class_sought: "किस कक्षा में दाखिला चाहिए?",
+  guardian_name: "माता-पिता या अभिभावक का पूरा नाम क्या है?",
+  current_city: "अभी आप किस शहर में रहते हैं?",
+  admission_city: "किस शहर में दाखिला चाहिए?",
+  phone: "10 अंकों का संपर्क नंबर बताइए।",
+  contact_time: "संपर्क करने का सही समय बताइए।",
+  full_name: "आपका पूरा नाम क्या है?",
+  city: "आप किस शहर में रहते हैं?",
+  email: "आपका ईमेल पता क्या है?",
+};
+
+const detectLanguage = (text: string, fallback: ConversationInputLanguage): ConversationInputLanguage => {
+  if (/[\u0900-\u097F]/u.test(text)) return "hi-IN";
+  if (/\b(?:i|my|mine|am|is|live|want|name|city|class|phone|email|yes|no|please)\b/iu.test(text)) return "en-IN";
+  return fallback;
+};
+
+const questionForField = (field: FormSchema["fields"][number], language: ConversationInputLanguage) =>
+  language === "hi-IN"
+    ? HINDI_FIELD_QUESTIONS[field.id] ?? `${field.label} बताइए।`
+    : `Please tell me: ${field.label}.`;
 
 const TRANSLATIONS = {
   'hi-IN': {
@@ -95,7 +120,10 @@ export default function Home() {
   const [sessionState, setSessionState] = useState<SessionState>("setup");
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [voiceError, setVoiceError] = useState<string | null>(null);
-  const [language, setLanguage] = useState<ConversationInputLanguage>("hi-IN");
+  const [language, setLanguage] = useState<ConversationInputLanguage>(() =>
+    navigator.language.toLowerCase().startsWith("hi") ? "hi-IN" : "en-IN"
+  );
+  const [languageMode, setLanguageMode] = useState<LanguageMode>("auto");
   
   const [activeSchema, setActiveSchema] = useState<FormSchema | null>(null);
   const [fieldValues, setFieldValues] = useState<FieldValue[]>([]);
@@ -137,8 +165,7 @@ export default function Home() {
       try {
         const res = await transcribeMutation.mutateAsync({ blob, language });
         if (res.text) {
-          setLastTranscript(res.text);
-          processUserTurn(res.text);
+          handleTranscript(res.text);
         } else {
           setVoiceError(t.readyStatus);
           setVoiceState("idle");
@@ -163,8 +190,7 @@ export default function Home() {
       language,
       onInterimTranscript: (text) => setLastTranscript(text),
       onFinalTranscript: (text) => {
-        setLastTranscript(text);
-        processUserTurn(text);
+        handleTranscript(text);
       },
     },
   );
@@ -210,17 +236,16 @@ export default function Home() {
   const startVoiceSession = async () => {
     setSessionState("workspace");
     if (!activeSchema) return;
-    const requiredCount = activeSchema.fields.filter((field) => field.required === "required").length;
-    const detailNames = activeSchema.fields.slice(0, 3).map((field) => field.label).join(", ");
-    const initialQuestion = language === "hi-IN"
-      ? `नमस्ते। यह ${activeSchema.title} फ़ॉर्म है। इसमें ${requiredCount || activeSchema.fields.length} ज़रूरी जानकारियाँ चाहिए, जैसे ${detailNames}। हम एक-एक करके सारी जानकारी भरेंगे। पहले अपना जवाब बताइए।`
-      : `Hello. This is the ${activeSchema.title} form. It asks for ${requiredCount || activeSchema.fields.length} required details, including ${detailNames}. Let's go one at a time and fill everything together. Tell me your first answer when you're ready.`;
+    const firstField = activeSchema.fields.find((field) => field.required === "required") ?? activeSchema.fields[0];
+    const initialQuestion = firstField
+      ? questionForField(firstField, language)
+      : language === "hi-IN" ? "अपना जवाब बताइए।" : "Please tell me your answer.";
     setCurrentQuestion(initialQuestion);
     await playAssistantSpeech(initialQuestion);
   };
 
-  const playAssistantSpeech = async (text: string) => {
-    const params = new URLSearchParams({ text, language });
+  const playAssistantSpeech = async (text: string, speechLanguage = language) => {
+    const params = new URLSearchParams({ text, language: speechLanguage });
     setAssistantAudioUrl(`/api/bolform/speak-stream?${params.toString()}`);
     setVoiceState("speaking");
   };
@@ -264,11 +289,17 @@ export default function Home() {
     }
     setAssistantAudioUrl(null);
     setTypedReply("");
-    setLastTranscript(text);
-    processUserTurn(text);
+    handleTranscript(text);
   };
 
-  const processUserTurn = async (text: string) => {
+  const handleTranscript = (text: string) => {
+    const turnLanguage = languageMode === "auto" ? detectLanguage(text, language) : languageMode;
+    if (turnLanguage !== language) setLanguage(turnLanguage);
+    setLastTranscript(text);
+    void processUserTurn(text, turnLanguage);
+  };
+
+  const processUserTurn = async (text: string, turnLanguage = language) => {
     if (!activeSchema) return;
     setVoiceState("understanding");
     setVoiceError(null);
@@ -286,7 +317,7 @@ export default function Home() {
         data: {
           turnId: currentTurnId,
           revision: turnRevision,
-          language,
+          language: turnLanguage,
           utterance: text,
           currentQuestion,
           schema: activeSchema,
@@ -304,12 +335,14 @@ export default function Home() {
       if (res.complete) {
         setSessionState("review");
       } else {
-        await playAssistantSpeech(`${res.reply} ${res.nextQuestion}`.trim());
+        await playAssistantSpeech(`${res.reply} ${res.nextQuestion}`.trim(), turnLanguage);
       }
     } catch (err) {
       console.error("Failed to process turn:", err);
       historyStack.current.pop();
-      setVoiceError("Network issue. Please try again.");
+      setVoiceError(turnLanguage === "hi-IN"
+        ? "जवाब नहीं भरा गया। कृपया दोबारा बोलें या टाइप करें।"
+        : "Your answer was not filled. Please speak again or type it.");
       setVoiceState("error");
     }
   };
@@ -387,15 +420,21 @@ export default function Home() {
         <div className="flex-1 overflow-y-auto px-4 py-8 md:p-12 flex flex-col items-center justify-center animate-in fade-in zoom-in-95 duration-700">
           
           <div className="absolute top-4 right-4 md:top-8 md:right-8 bg-white/50 backdrop-blur-sm p-1 rounded-full border shadow-sm flex items-center">
+            <button
+              onClick={() => setLanguageMode("auto")}
+              className={cn("px-3 py-2 text-sm font-semibold rounded-full transition-all", languageMode === "auto" ? "bg-primary text-white shadow-sm" : "text-muted-foreground hover:text-foreground")}
+            >
+              Auto
+            </button>
             <button 
-              onClick={() => setLanguage("hi-IN")}
-              className={cn("px-4 py-2 text-sm font-semibold rounded-full transition-all", language === "hi-IN" ? "bg-primary text-white shadow-sm" : "text-muted-foreground hover:text-foreground")}
+              onClick={() => { setLanguageMode("hi-IN"); setLanguage("hi-IN"); }}
+              className={cn("px-3 py-2 text-sm font-semibold rounded-full transition-all", languageMode === "hi-IN" ? "bg-primary text-white shadow-sm" : "text-muted-foreground hover:text-foreground")}
             >
               हिन्दी
             </button>
             <button 
-              onClick={() => setLanguage("en-IN")}
-              className={cn("px-4 py-2 text-sm font-semibold rounded-full transition-all", language === "en-IN" ? "bg-primary text-white shadow-sm" : "text-muted-foreground hover:text-foreground")}
+              onClick={() => { setLanguageMode("en-IN"); setLanguage("en-IN"); }}
+              className={cn("px-3 py-2 text-sm font-semibold rounded-full transition-all", languageMode === "en-IN" ? "bg-primary text-white shadow-sm" : "text-muted-foreground hover:text-foreground")}
             >
               English
             </button>

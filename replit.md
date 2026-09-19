@@ -20,6 +20,7 @@ BolForm makes forms easier: upload a form, answer naturally in Hindi or English,
 - Native AcroForm PDFs are inspected locally and preserve binding names. Other documents produce an honestly labelled response sheet.
 - The active session is an automatic listen → transcribe → process → speak loop. Voice activity detection ends a turn after speech followed by silence; typing remains a fallback.
 - The guided one-answer path is latency-sensitive: use live browser transcription when available, deterministic single-field processing, and streamed speech playback. Sarvam batch transcription and model reasoning are compatibility paths.
+- Language defaults to Auto: detect Hindi or English from the user's transcript, keep manual Hindi/English overrides available, and ask a specific field question on every turn.
 
 ## Product boundaries
 

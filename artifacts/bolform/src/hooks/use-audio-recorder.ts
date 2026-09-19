@@ -115,7 +115,7 @@ export const useAudioRecorder = (
           silentSince = null;
         } else if (speechStarted) {
           silentSince ??= now;
-          if (now - silentSince > 1200 && now - startedAt > 1000) {
+           if (now - silentSince > 800 && now - startedAt > 800) {
             recorder.stop();
             if (timer.current) clearInterval(timer.current);
             setIsRecording(false);

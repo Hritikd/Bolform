@@ -3,7 +3,7 @@
 ## 90-second demonstration
 
 1. Open the BolForm preview. Point out: “फ़ॉर्म भरने की झंझट नहीं। बस बोलें।” / “Don’t fill forms. Just speak.”
-2. Keep **हिन्दी** selected. Open **Examples** and choose the fictional school admission enquiry.
+2. Keep **Auto** selected. Open **Examples** and choose the fictional school admission enquiry.
 3. Select **Start filling**. BolForm explains what the form is for and says it will proceed one detail at a time. After it asks for the student name, say: “अनन्या शर्मा।”
 4. Stop speaking normally. Show that the name appears immediately and the next spoken question starts without waiting for a complete audio download.
 5. Answer each short question directly: “सातवीं”, “कविता शर्मा”, “जयपुर”, and “पुणे”.

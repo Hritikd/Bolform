@@ -127,16 +127,36 @@ export async function conversationTurn(input: any): Promise<any> {
   const fastResult = fastSingleFieldTurn(input);
   if (fastResult) return fastResult;
 
-  const raw = await chatJson(
-    `You are BolForm, a patient form-filling assistant. The user speaks ${input.language}. Extract only facts explicitly supported by the latest utterance. Preserve proper names. Handle corrections by replacing only the corrected field. Return JSON only: {"reply":"short localized acknowledgement","nextQuestion":"one short localized question","patches":[{"fieldId":"known id","value":string|number|boolean,"status":"answered|needs_confirmation|skipped","evidence":"exact relevant phrase"}],"complete":boolean}. Never invent data. Unknown/ambiguous information gets no patch. Ask one missing required question at a time. Hindi user replies and questions should be in Hindi, while values must match the English form where practical.`,
-    JSON.stringify({
-      fields: input.schema.fields.map(({ id, label, type, options, required, constraint }: FormField) => ({ id, label, type, options, required, constraint })),
-      currentValues: input.values,
-      currentQuestion: input.currentQuestion,
-      latestUtterance: input.utterance,
-    }),
-    450,
-  ) as any;
+  let raw: any;
+  try {
+    raw = await chatJson(
+      `You are BolForm, a patient form-filling assistant. The user speaks ${input.language}. Extract only facts explicitly supported by the latest utterance. Preserve proper names. Handle corrections by replacing only the corrected field. Return JSON only: {"reply":"short localized acknowledgement","nextQuestion":"one short localized question","patches":[{"fieldId":"known id","value":string|number|boolean,"status":"answered|needs_confirmation|skipped","evidence":"exact relevant phrase"}],"complete":boolean}. Never invent data. Unknown/ambiguous information gets no patch. Ask one missing required question at a time. Hindi user replies and questions should be in Hindi, while values must match the English form where practical.`,
+      JSON.stringify({
+        fields: input.schema.fields.map(({ id, label, type, options, required, constraint }: FormField) => ({ id, label, type, options, required, constraint })),
+        currentValues: input.values,
+        currentQuestion: input.currentQuestion,
+        latestUtterance: input.utterance,
+      }),
+      900,
+    );
+  } catch {
+    const answered = new Set(
+      (input.values ?? [])
+        .filter((value: any) => value.status === "answered" && String(value.value ?? "").trim())
+        .map((value: any) => value.fieldId),
+    );
+    const target = input.schema.fields.find((field: FormField) => !answered.has(field.id));
+    return {
+      turnId: `${input.turnId.split("-")[0]}-${input.revision + 1}`,
+      revision: input.revision + 1,
+      reply: input.language === "hi-IN"
+        ? "यह जवाब सुरक्षित रूप से नहीं भरा गया।"
+        : "I did not fill that answer because I could not verify it.",
+      nextQuestion: target ? fieldQuestion(target, input.language) : "",
+      patches: [],
+      complete: false,
+    };
+  }
   const patches = Array.isArray(raw.patches) ? raw.patches.filter((p: any) => allowed.has(p.fieldId) && typeof p.evidence === "string" && p.evidence.length > 0) : [];
   const valid: any[] = [];
   let validationQuestion = "";
@@ -198,10 +218,21 @@ function fastSingleFieldTurn(input: any): any | null {
     value = parsed;
   } else if (target.type === "select") {
     const normalized = utterance.toLocaleLowerCase();
-    const option = target.options.find((item: string) => {
+    let option = target.options.find((item: string) => {
       const candidate = item.toLocaleLowerCase();
       return normalized === candidate || normalized.includes(candidate);
     });
+    if (!option && target.id === "class_sought") {
+      const classWords: Record<string, string> = {
+        "पहली": "1", "पहली कक्षा": "1", "दूसरी": "2", "तीसरी": "3", "चौथी": "4",
+        "पाँचवीं": "5", "पांचवीं": "5", "छठी": "6", "सातवीं": "7", "आठवीं": "8",
+        "नौवीं": "9", "दसवीं": "10", "ग्यारहवीं": "11", "बारहवीं": "12",
+        "first": "1", "second": "2", "third": "3", "fourth": "4", "fifth": "5",
+        "sixth": "6", "seventh": "7", "eighth": "8", "ninth": "9", "tenth": "10",
+        "eleventh": "11", "twelfth": "12",
+      };
+      option = Object.entries(classWords).find(([word]) => normalized.includes(word))?.[1];
+    }
     if (!option) return null;
     value = option;
   } else if (target.type === "checkbox") {
@@ -218,13 +249,31 @@ function fastSingleFieldTurn(input: any): any | null {
     revision,
     reply: input.language === "hi-IN" ? "ठीक है।" : "Got it.",
     nextQuestion: next
-      ? input.language === "hi-IN"
-        ? `अब ${next.label} बताइए।`
-        : `What is your ${next.label}?`
+      ? fieldQuestion(next, input.language)
       : "",
     patches: [{ fieldId: target.id, value, status: "answered", evidence: utterance }],
     complete: !next,
   };
+}
+
+const HINDI_FIELD_QUESTIONS: Record<string, string> = {
+  student_name: "विद्यार्थी का पूरा नाम क्या है?",
+  class_sought: "किस कक्षा में दाखिला चाहिए?",
+  guardian_name: "माता-पिता या अभिभावक का पूरा नाम क्या है?",
+  current_city: "अभी आप किस शहर में रहते हैं?",
+  admission_city: "किस शहर में दाखिला चाहिए?",
+  phone: "10 अंकों का संपर्क नंबर बताइए।",
+  contact_time: "संपर्क करने का सही समय बताइए।",
+  full_name: "आपका पूरा नाम क्या है?",
+  city: "आप किस शहर में रहते हैं?",
+  email: "आपका ईमेल पता क्या है?",
+};
+
+function fieldQuestion(field: FormField, language: string): string {
+  if (language === "hi-IN") {
+    return HINDI_FIELD_QUESTIONS[field.id] ?? `${field.label} बताइए।`;
+  }
+  return `Please tell me: ${field.label}.`;
 }
 
 export async function textToSpeech(text: string, language: string): Promise<string> {
@@ -258,7 +307,7 @@ export async function speechToText(bytes: Uint8Array, mime: string, language: st
   form.append("file", new Blob([Uint8Array.from(bytes).buffer], { type: mime }), `recording.${mime.includes("webm") ? "webm" : mime.includes("ogg") ? "ogg" : "wav"}`);
   form.append("model", "saaras:v3");
   form.append("mode", "transcribe");
-  form.append("language_code", language);
+  form.append("language_code", language === "auto" ? "unknown" : language);
   const response = await sarvam("/speech-to-text", { method: "POST", body: form });
   const data = await response.json() as { transcript?: string };
   if (!data.transcript) throw new Error("Sarvam STT returned no transcript");
