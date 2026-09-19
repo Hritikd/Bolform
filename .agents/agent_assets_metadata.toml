@@ -1,0 +1,16 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "YTAUNlzSlfhxYcB9mDaBR"
+uri = "file://downloads/bolform-test-volunteer-form.pdf"
+type = "pdf"
+title = "BolForm test volunteer form"
+description = "A fictional, non-fillable PDF for testing BolForm's upload, Document AI extraction, guided answers, review, and PDF export."
+logical_id = "9c4586ae-160b-4fad-9903-4d4dad6d88ce"
+content_hash = "sha256:78192f94e3880793508d649142558e5a12ee771d18917a3574237df958a55a0c"
+size = 1306
+mtime_ms = 1789810519093
+storage_uri = "gcs://replit-rams-assets-pike/rams/assets/repl:d1b01d43-f1db-4684-9ba7-bf7d51ac9a45/9c4586ae-160b-4fad-9903-4d4dad6d88ce/73e88573-feb9-4555-a04c-fc4a23ab0f77"
+storage_version_token = "1789810524546869"
+content_type = "application/pdf"
