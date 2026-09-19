@@ -1,18 +1,31 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 
-export const useAudioRecorder = (onStop: (blob: Blob) => void, maxSeconds = 25) => {
+export const useAudioRecorder = (
+  onStop: (blob: Blob) => void,
+  onError: (err: Error) => void,
+  maxSeconds = 25
+) => {
   const [isRecording, setIsRecording] = useState(false);
   const [timeLeft, setTimeLeft] = useState(maxSeconds);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const audioChunks = useRef<Blob[]>([]);
   const timer = useRef<NodeJS.Timeout | null>(null);
+  const cancelRef = useRef(false);
+  const vadFrame = useRef<number | null>(null);
+  const audioContext = useRef<AudioContext | null>(null);
 
   const startRecording = useCallback(async () => {
     try {
+      cancelRef.current = false;
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
       mediaRecorder.current = recorder;
       audioChunks.current = [];
+      const context = new AudioContext();
+      const analyser = context.createAnalyser();
+      analyser.fftSize = 1024;
+      context.createMediaStreamSource(stream).connect(analyser);
+      audioContext.current = context;
 
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
@@ -21,14 +34,50 @@ export const useAudioRecorder = (onStop: (blob: Blob) => void, maxSeconds = 25) 
       };
 
       recorder.onstop = () => {
-        const blob = new Blob(audioChunks.current, { type: 'audio/webm' });
-        onStop(blob);
+        if (vadFrame.current !== null) cancelAnimationFrame(vadFrame.current);
+        vadFrame.current = null;
+        void audioContext.current?.close();
+        audioContext.current = null;
+        if (!cancelRef.current) {
+          const blob = new Blob(audioChunks.current, { type: 'audio/webm' });
+          onStop(blob);
+        }
         stream.getTracks().forEach((track) => track.stop());
       };
 
       recorder.start();
       setIsRecording(true);
       setTimeLeft(maxSeconds);
+
+      const levels = new Uint8Array(analyser.fftSize) as Uint8Array<ArrayBuffer>;
+      const startedAt = performance.now();
+      let speechStarted = false;
+      let silentSince: number | null = null;
+      const detectSilence = () => {
+        if (recorder.state === "inactive") return;
+        analyser.getByteTimeDomainData(levels);
+        let sum = 0;
+        for (const level of levels) {
+          const normalized = (level - 128) / 128;
+          sum += normalized * normalized;
+        }
+        const volume = Math.sqrt(sum / levels.length);
+        const now = performance.now();
+        if (volume > 0.025) {
+          speechStarted = true;
+          silentSince = null;
+        } else if (speechStarted) {
+          silentSince ??= now;
+          if (now - silentSince > 1200 && now - startedAt > 1000) {
+            recorder.stop();
+            if (timer.current) clearInterval(timer.current);
+            setIsRecording(false);
+            return;
+          }
+        }
+        vadFrame.current = requestAnimationFrame(detectSilence);
+      };
+      vadFrame.current = requestAnimationFrame(detectSilence);
 
       timer.current = setInterval(() => {
         setTimeLeft((prev) => {
@@ -41,15 +90,21 @@ export const useAudioRecorder = (onStop: (blob: Blob) => void, maxSeconds = 25) 
       }, 1000);
     } catch (err) {
       console.error('Error starting audio recording:', err);
+      onError(err instanceof Error ? err : new Error(String(err)));
     }
-  }, [maxSeconds, onStop]);
+  }, [maxSeconds, onStop, onError]);
 
-  const stopRecording = useCallback(() => {
+  const stopRecording = useCallback((cancel = false) => {
+    cancelRef.current = cancel;
     if (mediaRecorder.current && mediaRecorder.current.state !== 'inactive') {
       mediaRecorder.current.stop();
     }
     if (timer.current) {
       clearInterval(timer.current);
+    }
+    if (vadFrame.current !== null) {
+      cancelAnimationFrame(vadFrame.current);
+      vadFrame.current = null;
     }
     setIsRecording(false);
   }, []);
@@ -57,9 +112,12 @@ export const useAudioRecorder = (onStop: (blob: Blob) => void, maxSeconds = 25) 
   useEffect(() => {
     return () => {
       if (timer.current) clearInterval(timer.current);
+      if (vadFrame.current !== null) cancelAnimationFrame(vadFrame.current);
       if (mediaRecorder.current && mediaRecorder.current.state !== 'inactive') {
+        cancelRef.current = true;
         mediaRecorder.current.stop();
       }
+      void audioContext.current?.close();
     };
   }, []);
 

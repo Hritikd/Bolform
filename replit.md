@@ -1,6 +1,6 @@
 # BolForm
 
-BolForm helps a person complete an English form by speaking naturally in Hindi or English, reviewing validated answers, correcting mistakes, and downloading a PDF.
+BolForm is a voice-first agent that explains an English form, guides a person through it one detail at a time in Hindi or English, validates corrections, and prepares a downloadable PDF.
 
 ## Run & verify
 
@@ -18,6 +18,7 @@ BolForm helps a person complete an English form by speaking naturally in Hindi o
 - Sarvam powers chat/schema extraction, Bulbul v3 TTS, Saaras v3 STT, and asynchronous Document AI.
 - Uploaded files and answers are held only in browser memory or a short-lived in-process server map. There is no user database or analytics.
 - Native AcroForm PDFs are inspected locally and preserve binding names. Other documents produce an honestly labelled response sheet.
+- The active session is an automatic listen → transcribe → process → speak loop. Voice activity detection ends a turn after speech followed by silence; typing remains a fallback.
 
 ## Product boundaries
 
@@ -31,6 +32,7 @@ BolForm helps a person complete an English form by speaking naturally in Hindi o
 - Never silently switch away from Sarvam or fake model/voice results.
 - Validate model patches against known field IDs and server-owned field rules before changing state.
 - One active turn at a time; stale responses are discarded client-side.
+- Never record while synthesized assistant audio is playing; pausing invalidates any in-flight turn.
 - Failed upstream turns preserve the previous accepted values.
 - Do not log transcripts, form answers, uploaded bytes, or secrets.
 - Restart the API and web artifact workflows after server or frontend changes before preview verification.

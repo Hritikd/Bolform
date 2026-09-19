@@ -4,12 +4,12 @@
 
 1. Open the BolForm preview. Point out: “Your words. Your language. Your form, filled.” and the Hindi helper line.
 2. Keep **हिन्दी** selected. Open **Examples** and choose the fictional school admission enquiry.
-3. Tap the microphone and say:  
+3. Start the voice session. BolForm explains what the form is for, names the kinds of details it needs, and says it will proceed one at a time. After it finishes speaking, say:  
    “मेरी बेटी का नाम अनन्या शर्मा है। उसे छठी कक्षा में दाखिला चाहिए। हम अभी जयपुर में रहते हैं, लेकिन दाखिला पुणे में चाहिए। मेरा नाम कविता शर्मा है।”
-4. Show that five fields update and the assistant asks for a missing answer.
+4. Stop speaking normally. BolForm detects the pause, processes the answer, fills five fields, speaks the next question, and automatically listens again.
 5. Say: “माफ़ कीजिए, छठी नहीं, सातवीं कक्षा।” Show that only class changes to 7.
 6. Say: “मेरा नंबर 12345 है।” Show that the number is not accepted and BolForm asks for 10 digits.
-7. Use a clearly fictional 10-digit number and add a preferred contact time. Open review, edit one answer if useful, and export the PDF.
+7. Use a clearly fictional 10-digit number and add a preferred contact time. Pause the voice session, open review, edit one answer if useful, and export the PDF.
 8. Reset. Paste a small unrelated form or choose the volunteer example to demonstrate that the question set is generic.
 
 ## Live verification completed

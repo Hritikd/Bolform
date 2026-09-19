@@ -76,7 +76,9 @@ router.get("/bolform/examples/:id/pdf", async (req, res): Promise<void> => {
   const schema = examples.find((item) => item.id === req.params.id);
   if (!schema) { res.status(404).end(); return; }
   const pdf = await makeExamplePdf(schema, req.params.id === "school-enquiry");
-  res.type("application/pdf").attachment(`${schema.id}-blank.pdf`).send(Buffer.from(pdf));
+  res.type("application/pdf");
+  if (req.query.preview !== "1") res.attachment(`${schema.id}-blank.pdf`);
+  res.send(Buffer.from(pdf));
 });
 
 router.post("/bolform/export", expressJsonLimit("2mb"), async (req, res): Promise<void> => {
