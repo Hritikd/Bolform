@@ -154,7 +154,7 @@ export const VoiceOrb: React.FC<VoiceOrbProps> = ({ state, audioBase64, onAudioE
           onClick();
         }
       }}
-      aria-label="Voice Assistant Orb"
+      aria-label="Speak, pause, or continue filling the form"
     >
       {/* Background layer */}
       <div className={cn(

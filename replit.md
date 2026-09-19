@@ -1,6 +1,6 @@
 # BolForm
 
-BolForm is a voice-first agent that explains an English form, guides a person through it one detail at a time in Hindi or English, validates corrections, and prepares a downloadable PDF.
+BolForm makes forms easier: upload a form, answer naturally in Hindi or English, review the filled details, and download a PDF.
 
 ## Run & verify
 

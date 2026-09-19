@@ -325,10 +325,20 @@ export default function Home() {
             <div className="inline-flex items-center justify-center p-4 bg-primary/10 rounded-3xl mb-2">
               <Bot className="w-12 h-12 text-primary" />
             </div>
-            <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-foreground">BolForm Voice Agent</h1>
-            <p className="text-muted-foreground text-lg md:text-xl max-w-2xl mx-auto leading-relaxed">
-              A patient, voice-first agent that helps you navigate and complete forms in your preferred language.
+            <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-foreground">BolForm</h1>
+            <p className="text-2xl md:text-3xl font-semibold tracking-tight text-foreground">
+              Don&apos;t fill forms. Just speak.
             </p>
+            <p className="text-muted-foreground text-lg md:text-xl max-w-3xl mx-auto leading-relaxed">
+              Upload any form. BolForm explains it, collects each answer in Hindi or English, and gives you a ready-to-download PDF.
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm font-medium text-muted-foreground">
+              <span>Little to no typing</span>
+              <span className="hidden sm:inline text-primary">•</span>
+              <span>Review every answer</span>
+              <span className="hidden sm:inline text-primary">•</span>
+              <span>You decide when to download</span>
+            </div>
             <div className="flex justify-center mt-6">
               <div className="inline-flex items-center bg-card p-1.5 rounded-full shadow-sm border">
                 <Button 
@@ -442,8 +452,8 @@ export default function Home() {
               <span className="font-bold text-2xl text-primary">{activeSchema.fields.length}</span>
             </div>
             <div className="text-left text-slate-300 text-base leading-relaxed space-y-4">
-              <p>I will guide you through this form one step at a time.</p>
-              <p>You can speak naturally, and I will extract the required details.</p>
+              <p>BolForm will take you through this form one detail at a time.</p>
+              <p>Speak naturally. Your answers will appear in the form for you to review.</p>
             </div>
           </div>
 
@@ -452,7 +462,7 @@ export default function Home() {
             className="h-16 px-12 text-xl rounded-full shadow-[0_0_20px_rgba(20,184,166,0.3)] hover:shadow-[0_0_30px_rgba(20,184,166,0.5)] transition-all font-semibold" 
             onClick={startVoiceSession}
           >
-            Start Voice Session
+            Start filling
           </Button>
         </div>
       )}
@@ -467,7 +477,7 @@ export default function Home() {
                 className={cn("flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all", mobileTab === 'agent' ? "bg-slate-700 text-white shadow-sm" : "text-slate-400")}
                 onClick={() => setMobileTab('agent')}
               >
-                Assistant
+                BolForm
               </button>
               <button 
                 className={cn("flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all flex items-center justify-center gap-2", mobileTab === 'form' ? "bg-slate-700 text-white shadow-sm" : "text-slate-400")}
@@ -643,7 +653,7 @@ export default function Home() {
 
           <div className="flex flex-col sm:flex-row justify-center gap-4">
             <Button variant="outline" size="lg" className="rounded-full px-10 h-14 text-base font-semibold" onClick={() => setSessionState("workspace")}>
-              Back to Assistant
+              Back to BolForm
             </Button>
             <Button 
               size="lg" 
