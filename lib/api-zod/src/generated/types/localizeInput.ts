@@ -6,12 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { LanguageCode } from './languageCode';
+import type { LocalizeInputStrings } from './localizeInputStrings';
 
-export interface SpeechInput {
-  /**
-     * @minLength 1
-     * @maxLength 500
-     */
-  text: string;
+export interface LocalizeInput {
   language: LanguageCode;
+  strings: LocalizeInputStrings;
 }

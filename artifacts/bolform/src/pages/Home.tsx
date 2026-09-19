@@ -1,17 +1,30 @@
 import { useState, useRef, useEffect } from "react";
 import { UploadCloud, FileText, Languages, ArrowRight, Save, CheckCircle2, RotateCcw, AlertCircle, ArrowLeft, PauseCircle, Play, Mic, FileType, AlignLeft, Loader2 } from "lucide-react";
-import { useGetBolformStatus, useGetBolformExamples, useParseFormText, useProcessConversationTurn } from "@workspace/api-client-react";
+import { useGetBolformStatus, useGetBolformExamples, useParseFormText, useProcessConversationTurn, useLocalizeStrings } from "@workspace/api-client-react";
 import { useImportForm, useTranscribeAudio, useExportForm } from "../hooks/use-manual-apis";
-import type { FormSchema, FieldValue, ConversationInputLanguage, FieldPatch } from "@workspace/api-client-react";
+import type { FormSchema, FieldValue, LanguageCode, FieldPatch } from "@workspace/api-client-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { useAudioRecorder } from "../hooks/use-audio-recorder";
 import { VoiceOrb, type VoiceState } from "../components/voice-orb";
 import { cn } from "../lib/utils";
+import UI_STRINGS from "../lib/ui-strings.json";
 
 type SessionState = "setup" | "orientation" | "workspace" | "review";
-type LanguageMode = "auto" | ConversationInputLanguage;
+type LanguageMode = "auto" | LanguageCode;
+
+const LANGUAGE_OPTIONS: Array<{ code: LanguageCode; label: string }> = [
+  { code: "hi-IN", label: "हिन्दी" }, { code: "en-IN", label: "English" }, { code: "bn-IN", label: "বাংলা" }, { code: "gu-IN", label: "ગુજરાતી" },
+  { code: "kn-IN", label: "ಕನ್ನಡ" }, { code: "ml-IN", label: "മലയാളം" }, { code: "mr-IN", label: "मराठी" }, { code: "od-IN", label: "ଓଡ଼ିଆ" },
+  { code: "pa-IN", label: "ਪੰਜਾਬੀ" }, { code: "ta-IN", label: "தமிழ்" }, { code: "te-IN", label: "తెలుగు" },
+];
+const SUPPORTED_CODES = LANGUAGE_OPTIONS.map((option) => option.code);
+const isLanguageCode = (value: unknown): value is LanguageCode => SUPPORTED_CODES.includes(value as LanguageCode);
+const browserLanguage = (): LanguageCode => {
+  const prefix = navigator.language.toLowerCase().slice(0, 2);
+  return LANGUAGE_OPTIONS.find((option) => option.code.startsWith(prefix))?.code ?? "en-IN";
+};
 
 const HINDI_FIELD_QUESTIONS: Record<string, string> = {
   student_name: "विद्यार्थी का पूरा नाम क्या है?",
@@ -26,16 +39,45 @@ const HINDI_FIELD_QUESTIONS: Record<string, string> = {
   email: "आपका ईमेल पता क्या है?",
 };
 
-const detectLanguage = (text: string, fallback: ConversationInputLanguage): ConversationInputLanguage => {
-  if (/[\u0900-\u097F]/u.test(text)) return "hi-IN";
+const SCRIPT_RANGES: Array<[RegExp, LanguageCode]> = [
+  [/[\u0980-\u09FF]/u, "bn-IN"], [/[\u0A80-\u0AFF]/u, "gu-IN"], [/[\u0C80-\u0CFF]/u, "kn-IN"], [/[\u0D00-\u0D7F]/u, "ml-IN"],
+  [/[\u0B00-\u0B7F]/u, "od-IN"], [/[\u0A00-\u0A7F]/u, "pa-IN"], [/[\u0B80-\u0BFF]/u, "ta-IN"], [/[\u0C00-\u0C7F]/u, "te-IN"],
+  [/[\u0900-\u097F]/u, "hi-IN"],
+];
+
+/** Script-based detection for typed text and browser transcripts. Devanagari keeps Marathi if that is already active. */
+const detectLanguage = (text: string, fallback: LanguageCode): LanguageCode => {
+  for (const [pattern, code] of SCRIPT_RANGES) {
+    if (pattern.test(text)) return code === "hi-IN" && fallback === "mr-IN" ? "mr-IN" : code;
+  }
   if (/\b(?:i|my|mine|am|is|live|want|name|city|class|phone|email|yes|no|please)\b/iu.test(text)) return "en-IN";
   return fallback;
 };
 
-const questionForField = (field: FormSchema["fields"][number], language: ConversationInputLanguage) =>
-  language === "hi-IN"
-    ? HINDI_FIELD_QUESTIONS[field.id] ?? `${field.label} बताइए।`
-    : `Please tell me: ${field.label}.`;
+/**
+ * Auto mode: the script of the transcript is the strongest signal. Latin-script text is only treated as English when the
+ * transcriber says so; a bare name like "Ananya Sharma" is language-neutral, so the current language is kept.
+ */
+const resolveSpokenLanguage = (text: string, detected: string | null | undefined, current: LanguageCode): LanguageCode => {
+  const scriptLanguage = detectLanguage(text, current);
+  const indic = SCRIPT_RANGES.some(([pattern]) => pattern.test(text));
+  if (indic) return scriptLanguage === "hi-IN" && detected === "mr-IN" ? "mr-IN" : scriptLanguage;
+  if (detected === "en-IN") return "en-IN";
+  return isLanguageCode(detected) && current === "en-IN" && !/\b(?:i|my|am|is|the|and|want|please)\b/iu.test(text) ? detected : current;
+};
+
+const englishQuestion = (field: FormSchema["fields"][number]) => `Please tell me: ${field.label}.`;
+/** Mirrors the server's translation source: a short instruction translates more naturally than a bare label. */
+const questionSource = (field: FormSchema["fields"][number]) => {
+  const instruction = field.instructions.trim();
+  const base = `Please tell me the ${field.label.toLowerCase()}.`;
+  return instruction.length > 0 && instruction.length <= 90 ? `${base} ${instruction}` : base;
+};
+const staticQuestion = (field: FormSchema["fields"][number], language: LanguageCode): string | null => {
+  if (language === "en-IN") return englishQuestion(field);
+  if (language === "hi-IN") return HINDI_FIELD_QUESTIONS[field.id] ?? `${field.label} बताइए।`;
+  return null;
+};
 
 const TRANSLATIONS = {
   'hi-IN': {
@@ -73,7 +115,15 @@ const TRANSLATIONS = {
     extracting: "निकाला जा रहा है...",
     processText: "टेक्स्ट का उपयोग करें",
     backToStart: "शुरुआत में जाएँ",
-    close: "बंद करें"
+    close: "बंद करें",
+    speakIn: "बोलने की भाषा",
+    showIn: "स्क्रीन की भाषा",
+    autoDetect: "अपने आप",
+    notFilled: "जवाब नहीं भरा गया। कृपया दोबारा बोलें या टाइप करें।",
+    micDenied: "माइक्रोफ़ोन की अनुमति नहीं मिली। ब्राउज़र में अनुमति दें या जवाब टाइप करें।",
+    micUnavailable: "माइक्रोफ़ोन उपलब्ध नहीं है। दोबारा कोशिश करें या टाइप करें।",
+    micIssue: "आवाज़ समझ नहीं आई। दोबारा टैप करें या टाइप करें।",
+    yourAnswer: "अपना जवाब बताइए।"
   },
   'en-IN': {
     brandSubtitle: "Don't fill forms. Just speak.",
@@ -110,9 +160,21 @@ const TRANSLATIONS = {
     extracting: "Extracting...",
     processText: "Process Text",
     backToStart: "Back to Start",
-    close: "Close"
+    close: "Close",
+    speakIn: "Speaking language",
+    showIn: "Screen language",
+    autoDetect: "Auto",
+    notFilled: "Your answer was not filled. Please speak again or type it.",
+    micDenied: "Microphone permission denied. Allow access in your browser, or type your answer.",
+    micUnavailable: "Microphone unavailable. Try again or type your answer.",
+    micIssue: "I could not hear that. Tap to try again or type.",
+    yourAnswer: "Please tell me your answer."
   }
 };
+
+type Strings = typeof TRANSLATIONS["en-IN"];
+/** Interface text for the other nine languages, generated once through Sarvam translate and shipped statically. */
+const STATIC_STRINGS = UI_STRINGS as Record<string, Partial<Record<keyof Strings, string>>>;
 
 export default function Home() {
   const { data: status, isLoading: isStatusLoading } = useGetBolformStatus();
@@ -120,10 +182,10 @@ export default function Home() {
   const [sessionState, setSessionState] = useState<SessionState>("setup");
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [voiceError, setVoiceError] = useState<string | null>(null);
-  const [language, setLanguage] = useState<ConversationInputLanguage>(() =>
-    navigator.language.toLowerCase().startsWith("hi") ? "hi-IN" : "en-IN"
-  );
+  const [uiLanguage, setUiLanguage] = useState<LanguageCode>(browserLanguage);
+  const [language, setLanguage] = useState<LanguageCode>(browserLanguage);
   const [languageMode, setLanguageMode] = useState<LanguageMode>("auto");
+  const localizeMutation = useLocalizeStrings();
   
   const [activeSchema, setActiveSchema] = useState<FormSchema | null>(null);
   const [fieldValues, setFieldValues] = useState<FieldValue[]>([]);
@@ -157,36 +219,39 @@ export default function Home() {
   const [sourcePreview, setSourcePreview] = useState<{ url: string; mime: string } | null>(null);
   const [setupMode, setSetupMode] = useState<"upload" | "paste" | "examples">("upload");
 
-  const t = TRANSLATIONS[language];
+  const t: Strings = uiLanguage === "hi-IN" || uiLanguage === "en-IN"
+    ? TRANSLATIONS[uiLanguage]
+    : { ...TRANSLATIONS["en-IN"], ...(STATIC_STRINGS[uiLanguage] ?? {}), step: (c: number, total: number) => `${c} / ${total}` };
 
   const { isRecording, startRecording, stopRecording } = useAudioRecorder(
     async (blob) => {
       setVoiceState("understanding");
+      const requestId = activeRequest.current;
       try {
-        const res = await transcribeMutation.mutateAsync({ blob, language });
+        const res = await transcribeMutation.mutateAsync({ blob, language: languageMode === "auto" ? "auto" : language });
+        // A reset, pause, or undo while transcription was in flight makes this recording stale.
+        if (requestId !== activeRequest.current) return;
         if (res.text) {
-          handleTranscript(res.text);
+          handleTranscript(res.text, res.detectedLanguage);
         } else {
           setVoiceError(t.readyStatus);
           setVoiceState("idle");
         }
       } catch (err) {
+        if (requestId !== activeRequest.current) return;
         console.error("Transcription failed", err);
-        setVoiceError("Microphone issue. Please tap to try again or type.");
+        setVoiceError(t.micIssue);
         setVoiceState("error");
       }
     },
     (err) => {
       console.error("Audio error", err);
-      setVoiceError(
-        err.name === "NotAllowedError"
-          ? "Microphone permission denied. Allow access in your browser, or type your answer."
-          : "Microphone unavailable. Try again or type your answer."
-      );
+      setVoiceError(err.name === "NotAllowedError" ? t.micDenied : t.micUnavailable);
       setVoiceState("error");
     },
     25,
-    {
+    // Browser recognition needs a fixed language; in Auto mode every turn goes through Sarvam's auto-detecting transcription.
+    languageMode === "auto" ? undefined : {
       language,
       onInterimTranscript: (text) => setLastTranscript(text),
       onFinalTranscript: (text) => {
@@ -223,6 +288,7 @@ export default function Home() {
     setFieldValues([]);
     setSourcePreview(preview ?? null);
     setSessionState("orientation");
+    if (languageMode === "auto") setLanguage(uiLanguage);
     historyStack.current = [];
     setCurrentTurnId("init");
     setTurnRevision(0);
@@ -237,11 +303,19 @@ export default function Home() {
     setSessionState("workspace");
     if (!activeSchema) return;
     const firstField = activeSchema.fields.find((field) => field.required === "required") ?? activeSchema.fields[0];
-    const initialQuestion = firstField
-      ? questionForField(firstField, language)
-      : language === "hi-IN" ? "अपना जवाब बताइए।" : "Please tell me your answer.";
-    setCurrentQuestion(initialQuestion);
-    await playAssistantSpeech(initialQuestion);
+    let initialQuestion = firstField ? staticQuestion(firstField, language) : t.yourAnswer;
+    if (initialQuestion === null && firstField) {
+      const english = questionSource(firstField);
+      initialQuestion = englishQuestion(firstField);
+      try {
+        const res = await localizeMutation.mutateAsync({ data: { language, strings: { q: english } } });
+        initialQuestion = res.strings.q || english;
+      } catch (err) {
+        console.error("Question translation failed; asking in English", err);
+      }
+    }
+    setCurrentQuestion(initialQuestion ?? "");
+    await playAssistantSpeech(initialQuestion ?? "", language);
   };
 
   const playAssistantSpeech = async (text: string, speechLanguage = language) => {
@@ -292,8 +366,8 @@ export default function Home() {
     handleTranscript(text);
   };
 
-  const handleTranscript = (text: string) => {
-    const turnLanguage = languageMode === "auto" ? detectLanguage(text, language) : languageMode;
+  const handleTranscript = (text: string, detected?: string | null) => {
+    const turnLanguage = languageMode !== "auto" ? languageMode : resolveSpokenLanguage(text, detected, language);
     if (turnLanguage !== language) setLanguage(turnLanguage);
     setLastTranscript(text);
     void processUserTurn(text, turnLanguage);
@@ -340,9 +414,7 @@ export default function Home() {
     } catch (err) {
       console.error("Failed to process turn:", err);
       historyStack.current.pop();
-      setVoiceError(turnLanguage === "hi-IN"
-        ? "जवाब नहीं भरा गया। कृपया दोबारा बोलें या टाइप करें।"
-        : "Your answer was not filled. Please speak again or type it.");
+      setVoiceError(t.notFilled);
       setVoiceState("error");
     }
   };
@@ -419,25 +491,40 @@ export default function Home() {
       {sessionState === "setup" && (
         <div className="flex-1 overflow-y-auto px-4 py-8 md:p-12 flex flex-col items-center justify-center animate-in fade-in zoom-in-95 duration-700">
           
-          <div className="absolute top-4 right-4 md:top-8 md:right-8 bg-white/50 backdrop-blur-sm p-1 rounded-full border shadow-sm flex items-center">
-            <button
-              onClick={() => setLanguageMode("auto")}
-              className={cn("px-3 py-2 text-sm font-semibold rounded-full transition-all", languageMode === "auto" ? "bg-primary text-white shadow-sm" : "text-muted-foreground hover:text-foreground")}
-            >
-              Auto
-            </button>
-            <button 
-              onClick={() => { setLanguageMode("hi-IN"); setLanguage("hi-IN"); }}
-              className={cn("px-3 py-2 text-sm font-semibold rounded-full transition-all", languageMode === "hi-IN" ? "bg-primary text-white shadow-sm" : "text-muted-foreground hover:text-foreground")}
-            >
-              हिन्दी
-            </button>
-            <button 
-              onClick={() => { setLanguageMode("en-IN"); setLanguage("en-IN"); }}
-              className={cn("px-3 py-2 text-sm font-semibold rounded-full transition-all", languageMode === "en-IN" ? "bg-primary text-white shadow-sm" : "text-muted-foreground hover:text-foreground")}
-            >
-              English
-            </button>
+          <div className="absolute top-4 right-4 md:top-8 md:right-8 flex items-center gap-2">
+            <label className="flex items-center gap-1.5 bg-white/70 backdrop-blur-sm px-2.5 py-1.5 rounded-full border shadow-sm text-xs font-semibold text-muted-foreground">
+              <Mic className="w-3.5 h-3.5 text-primary" />
+              <span className="sr-only">{t.speakIn}</span>
+              <select
+                aria-label={t.speakIn}
+                value={languageMode}
+                onChange={(e) => {
+                  const mode = e.target.value as LanguageMode;
+                  setLanguageMode(mode);
+                  setLanguage(mode === "auto" ? uiLanguage : mode);
+                }}
+                className="bg-transparent text-foreground text-sm font-semibold outline-none max-w-[8rem]"
+              >
+                <option value="auto">{t.autoDetect}</option>
+                {LANGUAGE_OPTIONS.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
+              </select>
+            </label>
+            <label className="flex items-center gap-1.5 bg-white/70 backdrop-blur-sm px-2.5 py-1.5 rounded-full border shadow-sm text-xs font-semibold text-muted-foreground">
+              <Languages className="w-3.5 h-3.5 text-primary" />
+              <span className="sr-only">{t.showIn}</span>
+              <select
+                aria-label={t.showIn}
+                value={uiLanguage}
+                onChange={(e) => {
+                  const code = e.target.value as LanguageCode;
+                  setUiLanguage(code);
+                  if (languageMode === "auto") setLanguage(code);
+                }}
+                className="bg-transparent text-foreground text-sm font-semibold outline-none max-w-[6.5rem]"
+              >
+                {LANGUAGE_OPTIONS.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}
+              </select>
+            </label>
           </div>
 
           <div className="text-center max-w-xl mx-auto mb-10 mt-10">
@@ -597,14 +684,13 @@ export default function Home() {
           <div className="flex-1 flex flex-col items-center justify-center p-6 space-y-10 overflow-y-auto relative z-10 pb-32">
             
             <div className="text-center w-full max-w-xl mx-auto space-y-3 min-h-[140px] flex flex-col justify-end">
-              {voiceState === 'error' ? (
-                <div className="text-destructive font-semibold bg-destructive/10 p-5 rounded-3xl border border-destructive/20 animate-in slide-in-from-bottom-2 text-lg">
+              <h2 className="text-2xl md:text-4xl font-bold leading-tight tracking-tight text-foreground animate-in fade-in slide-in-from-bottom-2">
+                {currentQuestion}
+              </h2>
+              {voiceState === 'error' && voiceError && (
+                <div className="text-destructive font-semibold bg-destructive/10 p-4 rounded-3xl border border-destructive/20 animate-in slide-in-from-bottom-2 text-base">
                   {voiceError}
                 </div>
-              ) : (
-                <h2 className="text-2xl md:text-4xl font-bold leading-tight tracking-tight text-foreground animate-in fade-in slide-in-from-bottom-2">
-                  {currentQuestion}
-                </h2>
               )}
             </div>
 

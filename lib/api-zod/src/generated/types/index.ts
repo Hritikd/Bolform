@@ -7,7 +7,6 @@
  */
 
 export * from './conversationInput';
-export * from './conversationInputLanguage';
 export * from './conversationResult';
 export * from './fieldPatch';
 export * from './fieldPatchStatus';
@@ -18,6 +17,11 @@ export * from './formFieldRequired';
 export * from './formFieldType';
 export * from './formSchema';
 export * from './healthStatus';
+export * from './languageCode';
+export * from './localizeInput';
+export * from './localizeInputStrings';
+export * from './localizeResult';
+export * from './localizeResultStrings';
 export * from './parseTextInput';
 export * from './providerStatus';
 export * from './providerStatusChat';
@@ -25,7 +29,5 @@ export * from './providerStatusDocumentAi';
 export * from './providerStatusSpeech';
 export * from './providerStatusTranscription';
 export * from './speechInput';
-export * from './speechInputLanguage';
 export * from './speechResult';
-export * from './streamSpeechLanguage';
 export * from './streamSpeechParams';

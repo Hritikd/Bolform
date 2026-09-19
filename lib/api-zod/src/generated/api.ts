@@ -90,7 +90,7 @@ export const processConversationTurnBodySchemaFieldsMax = 25;
 export const ProcessConversationTurnBody = zod.object({
   "turnId": zod.string(),
   "revision": zod.number().int().min(processConversationTurnBodyRevisionMin),
-  "language": zod.enum(['hi-IN', 'en-IN']),
+  "language": zod.enum(['en-IN', 'hi-IN', 'bn-IN', 'gu-IN', 'kn-IN', 'ml-IN', 'mr-IN', 'od-IN', 'pa-IN', 'ta-IN', 'te-IN']),
   "utterance": zod.string().min(1).max(processConversationTurnBodyUtteranceMax),
   "currentQuestion": zod.string().max(processConversationTurnBodyCurrentQuestionMax),
   "schema": zod.object({
@@ -137,12 +137,26 @@ export const synthesizeSpeechBodyTextMax = 500;
 
 export const SynthesizeSpeechBody = zod.object({
   "text": zod.string().min(1).max(synthesizeSpeechBodyTextMax),
-  "language": zod.enum(['hi-IN', 'en-IN'])
+  "language": zod.enum(['en-IN', 'hi-IN', 'bn-IN', 'gu-IN', 'kn-IN', 'ml-IN', 'mr-IN', 'od-IN', 'pa-IN', 'ta-IN', 'te-IN'])
 })
 
 export const SynthesizeSpeechResponse = zod.object({
   "audioBase64": zod.string(),
   "mimeType": zod.string()
+})
+
+
+export const localizeStringsBodyStringsMaxOne = 300;
+
+
+
+export const LocalizeStringsBody = zod.object({
+  "language": zod.enum(['en-IN', 'hi-IN', 'bn-IN', 'gu-IN', 'kn-IN', 'ml-IN', 'mr-IN', 'od-IN', 'pa-IN', 'ta-IN', 'te-IN']),
+  "strings": zod.record(zod.string(), zod.string().max(localizeStringsBodyStringsMaxOne))
+})
+
+export const LocalizeStringsResponse = zod.object({
+  "strings": zod.record(zod.string(), zod.string())
 })
 
 
@@ -152,7 +166,7 @@ export const streamSpeechQueryTextMax = 500;
 
 export const StreamSpeechQueryParams = zod.object({
   "text": zod.coerce.string().min(1).max(streamSpeechQueryTextMax),
-  "language": zod.enum(['hi-IN', 'en-IN'])
+  "language": zod.enum(['en-IN', 'hi-IN', 'bn-IN', 'gu-IN', 'kn-IN', 'ml-IN', 'mr-IN', 'od-IN', 'pa-IN', 'ta-IN', 'te-IN'])
 })
 
 export const StreamSpeechResponse = zod.unknown()

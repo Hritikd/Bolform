@@ -5,6 +5,36 @@
  * BolForm API
  * OpenAPI spec version: 0.1.0
  */
+export type LanguageCode = typeof LanguageCode[keyof typeof LanguageCode];
+
+
+export const LanguageCode = {
+  'en-IN': 'en-IN',
+  'hi-IN': 'hi-IN',
+  'bn-IN': 'bn-IN',
+  'gu-IN': 'gu-IN',
+  'kn-IN': 'kn-IN',
+  'ml-IN': 'ml-IN',
+  'mr-IN': 'mr-IN',
+  'od-IN': 'od-IN',
+  'pa-IN': 'pa-IN',
+  'ta-IN': 'ta-IN',
+  'te-IN': 'te-IN',
+} as const;
+
+export type LocalizeInputStrings = {[key: string]: string};
+
+export interface LocalizeInput {
+  language: LanguageCode;
+  strings: LocalizeInputStrings;
+}
+
+export type LocalizeResultStrings = {[key: string]: string};
+
+export interface LocalizeResult {
+  strings: LocalizeResultStrings;
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -120,19 +150,11 @@ export interface FieldValue {
   status: FieldValueStatus;
 }
 
-export type ConversationInputLanguage = typeof ConversationInputLanguage[keyof typeof ConversationInputLanguage];
-
-
-export const ConversationInputLanguage = {
-  'hi-IN': 'hi-IN',
-  'en-IN': 'en-IN',
-} as const;
-
 export interface ConversationInput {
   turnId: string;
   /** @minimum 0 */
   revision: number;
-  language: ConversationInputLanguage;
+  language: LanguageCode;
   /**
      * @minLength 1
      * @maxLength 2000
@@ -169,21 +191,13 @@ export interface ConversationResult {
   complete: boolean;
 }
 
-export type SpeechInputLanguage = typeof SpeechInputLanguage[keyof typeof SpeechInputLanguage];
-
-
-export const SpeechInputLanguage = {
-  'hi-IN': 'hi-IN',
-  'en-IN': 'en-IN',
-} as const;
-
 export interface SpeechInput {
   /**
      * @minLength 1
      * @maxLength 500
      */
   text: string;
-  language: SpeechInputLanguage;
+  language: LanguageCode;
 }
 
 export interface SpeechResult {
@@ -197,14 +211,6 @@ export type StreamSpeechParams = {
  * @maxLength 500
  */
 text: string;
-language: StreamSpeechLanguage;
+language: LanguageCode;
 };
-
-export type StreamSpeechLanguage = typeof StreamSpeechLanguage[keyof typeof StreamSpeechLanguage];
-
-
-export const StreamSpeechLanguage = {
-  'hi-IN': 'hi-IN',
-  'en-IN': 'en-IN',
-} as const;
 

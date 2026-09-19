@@ -5,15 +5,15 @@
  * BolForm API
  * OpenAPI spec version: 0.1.0
  */
-import type { ConversationInputLanguage } from './conversationInputLanguage';
 import type { FieldValue } from './fieldValue';
 import type { FormSchema } from './formSchema';
+import type { LanguageCode } from './languageCode';
 
 export interface ConversationInput {
   turnId: string;
   /** @minimum 0 */
   revision: number;
-  language: ConversationInputLanguage;
+  language: LanguageCode;
   /**
      * @minLength 1
      * @maxLength 2000

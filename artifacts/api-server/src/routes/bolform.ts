@@ -3,8 +3,9 @@ import { Readable } from "node:stream";
 import {
   GetBolformExamplesResponse, GetBolformStatusResponse, ParseFormTextBody, ParseFormTextResponse,
   ProcessConversationTurnBody, ProcessConversationTurnResponse, SynthesizeSpeechBody, SynthesizeSpeechResponse,
+  LocalizeStringsBody, LocalizeStringsResponse,
 } from "@workspace/api-zod";
-import { conversationTurn, documentExtract, examples, exportResponse, inspectNativePdf, makeExamplePdf, parseTextWithSarvam, speechToText, streamTextToSpeech, textToSpeech } from "../lib/bolform";
+import { conversationTurn, documentExtract, examples, exportResponse, inspectNativePdf, isSupportedLanguage, localizeMany, makeExamplePdf, parseTextWithSarvam, speechToText, streamTextToSpeech, textToSpeech } from "../lib/bolform";
 
 const router: IRouter = Router();
 const buckets = new Map<string, { count: number; reset: number }>();
@@ -54,7 +55,7 @@ router.post("/bolform/speak", async (req, res): Promise<void> => {
 router.get("/bolform/speak-stream", async (req, res): Promise<void> => {
   const text = String(req.query.text ?? "").trim();
   const language = String(req.query.language ?? "hi-IN");
-  if (!text || text.length > 500 || !["hi-IN", "en-IN"].includes(language)) {
+  if (!text || text.length > 500 || !isSupportedLanguage(language)) {
     res.status(400).json({ error: "That prompt cannot be spoken." });
     return;
   }
@@ -72,11 +73,21 @@ router.get("/bolform/speak-stream", async (req, res): Promise<void> => {
   }
 });
 
+router.post("/bolform/localize", async (req, res): Promise<void> => {
+  const parsed = LocalizeStringsBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Invalid localization request." }); return; }
+  const entries = Object.entries(parsed.data.strings);
+  if (entries.length > 80 || entries.some(([, text]) => typeof text !== "string" || text.length > 300)) {
+    res.status(400).json({ error: "Too many or too long strings to localize." }); return;
+  }
+  res.json(LocalizeStringsResponse.parse({ strings: await localizeMany(parsed.data.strings, parsed.data.language) }));
+});
+
 router.post("/bolform/transcribe", expressRaw(12 * 1024 * 1024), async (req, res): Promise<void> => {
   const mime = String(req.headers["x-audio-mime"] || "audio/webm");
-  const language = String(req.headers["x-language"] || "hi-IN");
+  const language = String(req.headers["x-language"] || "auto");
   if (!Buffer.isBuffer(req.body) || req.body.length === 0) { res.status(400).json({ error: "No recording received." }); return; }
-  try { res.json({ transcript: await speechToText(req.body, mime, language) }); }
+  try { res.json(await speechToText(req.body, mime, language)); }
   catch (error) { req.log.warn({ err: error }, "Transcription failed"); res.status(502).json({ error: "I could not transcribe that recording. Please retry or type instead." }); }
 });
 

@@ -5,7 +5,7 @@
  * BolForm API
  * OpenAPI spec version: 0.1.0
  */
-import type { StreamSpeechLanguage } from './streamSpeechLanguage';
+import type { LanguageCode } from './languageCode';
 
 export type StreamSpeechParams = {
 /**
@@ -13,5 +13,5 @@ export type StreamSpeechParams = {
  * @maxLength 500
  */
 text: string;
-language: StreamSpeechLanguage;
+language: LanguageCode;
 };

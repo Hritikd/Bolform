@@ -3,7 +3,7 @@
 ## 90-second demonstration
 
 1. Open the BolForm preview. Point out: “फ़ॉर्म भरने की झंझट नहीं। बस बोलें।” / “Don’t fill forms. Just speak.”
-2. Keep **Auto** selected. Open **Examples** and choose the fictional school admission enquiry.
+2. Two pickers sit at the top right: the **speaking language** (keep **Auto** — BolForm detects Hindi, English, Kannada, Telugu, Tamil, Bengali, Marathi, Gujarati, Malayalam, Odia or Punjabi from each answer and replies in that language) and the **screen language** (interface text). Open **Try Sample** and choose the fictional school admission enquiry.
 3. Select **Start filling**. BolForm explains what the form is for and says it will proceed one detail at a time. After it asks for the student name, say: “अनन्या शर्मा।”
 4. Stop speaking normally. Show that the name appears immediately and the next spoken question starts without waiting for a complete audio download.
 5. Answer each short question directly: “सातवीं”, “कविता शर्मा”, “जयपुर”, and “पुणे”.
@@ -24,11 +24,12 @@ These are live API checks, not mocked provider results. Synthetic TTS-to-STT pro
 
 ## Latency verification
 
-- Common one-answer form updates: **1–10 ms** measured server response time
+- Common one-answer form updates in English: **1–20 ms** measured server response time; when the value must be converted into the form's script (e.g. Hindi/Kannada speech into an English form) add roughly **0.5 s** for Sarvam transliteration
+- Sentences and corrections use `sarvam-105b-conversations` and return in **0.3–2 s** (the reasoning variant `sarvam-105b` spent 10–20 s thinking and often returned nothing)
 - Short spoken prompt first byte: **171–470 ms** across repeated checks
 - Longer Hindi introduction first byte: **488 ms** while the remaining audio continued streaming
 - Supported Chrome/Android browsers use live browser transcription to avoid waiting for a completed recording upload
-- Sarvam batch transcription remains the compatibility fallback and can take longer than 600 ms
+- Auto language mode uses Sarvam batch transcription for every answer (measured 210–700 ms) because browser recognition needs a fixed language; choose a language explicitly for the live-transcription path
 - Complex corrections or multi-field sentences intentionally use the reasoning model and can take longer; keep the live demo to the guided one-answer-at-a-time path
 
 ## Local checks
@@ -42,7 +43,9 @@ These are live API checks, not mocked provider results. Synthetic TTS-to-STT pro
 
 - Files: fillable or non-fillable PDF, PNG, JPEG, and pasted text
 - Limits: 10 MB, up to 3 pages, up to 25 fields, 25 seconds per recording
-- Thoroughly tested speaking languages: Hindi (`hi-IN`) and English (`en-IN`)
+- Speaking languages: Hindi, English, Bengali, Gujarati, Kannada, Malayalam, Marathi, Odia, Punjabi, Tamil, Telugu. **Auto** detects the language per answer through Sarvam transcription; picking a fixed language enables live browser transcription (fastest)
+- Form values are written in the form's own language: names and places are transliterated, other text is translated (e.g. Kannada speech → English form → "Ananya Sharma", "Bengaluru")
+- Screen language is separate from the speaking language; Hindi and English text is built in, the other nine are machine-translated with an English fallback
 - Native fillable PDFs: supported text bindings are filled in the original PDF
 - Scans, images, non-fillable PDFs, and pasted forms: a labelled “Completed response sheet” is generated
 - Manual only: signatures, attachments, attestations, unsupported structures, and unclear scans

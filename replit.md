@@ -1,6 +1,6 @@
 # BolForm
 
-BolForm makes forms easier: upload a form, answer naturally in Hindi or English, review the filled details, and download a PDF.
+BolForm makes forms easier: upload a form, answer naturally in any of 11 Indian languages, review the filled details, and download a PDF. `README.md` is the public GitHub-facing guide; keep it in sync with product changes.
 
 ## Run & verify
 
@@ -20,12 +20,12 @@ BolForm makes forms easier: upload a form, answer naturally in Hindi or English,
 - Native AcroForm PDFs are inspected locally and preserve binding names. Other documents produce an honestly labelled response sheet.
 - The active session is an automatic listen → transcribe → process → speak loop. Voice activity detection ends a turn after speech followed by silence; typing remains a fallback.
 - The guided one-answer path is latency-sensitive: use live browser transcription when available, deterministic single-field processing, and streamed speech playback. Sarvam batch transcription and model reasoning are compatibility paths.
-- Language defaults to Auto: detect Hindi or English from the user's transcript, keep manual Hindi/English overrides available, and ask a specific field question on every turn.
+- Language defaults to Auto: detect the spoken language per turn (11 Indian languages), keep a manual override available, and ask a specific field question on every turn.
 
 ## Product boundaries
 
 - Supported: PDF, PNG, JPEG, and pasted text; up to 10 MB and 25 fields. The UI advertises the three-page prototype boundary.
-- Tested languages: Hindi and English. Values retain the form's requested language where practical.
+- Speaking/screen languages: 11 (see Languages below). Values are written in the form's own language/script.
 - Out of scope: signatures, attachments, CAPTCHAs, payments, arbitrary websites, submission, and institutional acceptance.
 - A formatted response sheet is not represented as preserving an original scan's layout.
 
@@ -41,9 +41,17 @@ BolForm makes forms easier: upload a form, answer naturally in Hindi or English,
 
 ## Repo map
 
+- `README.md` — public project guide (GitHub); `LICENSE` — MIT
+- `artifacts/api-server/assets/fonts/` — Noto fonts embedded in exported PDFs (Indic scripts); `regenerator-runtime` import is required by @pdf-lib/fontkit for Devanagari
+
 - `artifacts/bolform/src/pages/Home.tsx` — complete product flow and in-memory session state
 - `artifacts/bolform/src/hooks/` — microphone and raw upload/transcription/export clients
 - `artifacts/api-server/src/lib/bolform.ts` — Sarvam clients, validation, examples, and PDF generation
 - `artifacts/api-server/src/routes/bolform.ts` — bounded public API and short-lived file scoping
 - `lib/api-spec/openapi.yaml` — typed contract
 - `DEMO.md` — demonstration, test evidence, support matrix, and publishing steps
+## Languages (Sept 2026)
+- Speaking languages: 11 Sarvam languages (en, hi, bn, gu, kn, ml, mr, od, pa, ta, te `-IN`), shared `LanguageCode` enum in `lib/api-spec/openapi.yaml`. Auto mode = per-turn Sarvam STT auto-detect; fixed language = live browser transcription.
+- Screen language is a separate picker. hi/en strings are static in `Home.tsx`; other languages are fetched via `POST /api/bolform/localize` (server-cached Sarvam translate, English fallback).
+- Form values are converted to the form's `sourceLanguage` script server-side (`toFormLanguage` in `artifacts/api-server/src/lib/bolform.ts`): proper-noun fields transliterated, other text translated.
+- Chat model is `sarvam-105b-conversations` (non-reasoning). Do not switch back to `sarvam-105b` for turns: it exhausts token budgets in reasoning.

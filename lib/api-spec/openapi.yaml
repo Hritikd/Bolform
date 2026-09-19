@@ -87,6 +87,21 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SpeechResult" }
+  /bolform/localize:
+    post:
+      operationId: localizeStrings
+      tags: [bolform]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LocalizeInput" }
+      responses:
+        "200":
+          description: Localized interface strings
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LocalizeResult" }
   /bolform/speak-stream:
     get:
       operationId: streamSpeech
@@ -99,7 +114,7 @@ paths:
         - in: query
           name: language
           required: true
-          schema: { type: string, enum: [hi-IN, en-IN] }
+          schema: { $ref: "#/components/schemas/LanguageCode" }
       responses:
         "200":
           description: Streaming MP3 audio
@@ -108,6 +123,25 @@ paths:
               schema: { type: string, format: binary }
 components:
   schemas:
+    LanguageCode:
+      type: string
+      enum: [en-IN, hi-IN, bn-IN, gu-IN, kn-IN, ml-IN, mr-IN, od-IN, pa-IN, ta-IN, te-IN]
+    LocalizeInput:
+      type: object
+      properties:
+        language: { $ref: "#/components/schemas/LanguageCode" }
+        strings:
+          type: object
+          maxProperties: 80
+          additionalProperties: { type: string, maxLength: 300 }
+      required: [language, strings]
+    LocalizeResult:
+      type: object
+      properties:
+        strings:
+          type: object
+          additionalProperties: { type: string }
+      required: [strings]
     HealthStatus:
       type: object
       properties:
@@ -164,7 +198,7 @@ components:
       properties:
         turnId: { type: string }
         revision: { type: integer, minimum: 0 }
-        language: { type: string, enum: [hi-IN, en-IN] }
+        language: { $ref: "#/components/schemas/LanguageCode" }
         utterance: { type: string, minLength: 1, maxLength: 2000 }
         currentQuestion: { type: string, maxLength: 1000 }
         schema: { $ref: "#/components/schemas/FormSchema" }
@@ -196,7 +230,7 @@ components:
       type: object
       properties:
         text: { type: string, minLength: 1, maxLength: 500 }
-        language: { type: string, enum: [hi-IN, en-IN] }
+        language: { $ref: "#/components/schemas/LanguageCode" }
       required: [text, language]
     SpeechResult:
       type: object

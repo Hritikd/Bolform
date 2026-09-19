@@ -1,5 +1,10 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 
+/** Chrome/Firefox record WebM/Opus; Safari (iOS) only supports MP4/AAC. */
+const RECORDER_MIME_TYPES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
+const recorderMimeType = (): string | undefined =>
+  typeof MediaRecorder === 'undefined' ? undefined : RECORDER_MIME_TYPES.find((type) => MediaRecorder.isTypeSupported(type));
+
 export const useAudioRecorder = (
   onStop: (blob: Blob) => void,
   onError: (err: Error) => void,
@@ -26,7 +31,14 @@ export const useAudioRecorder = (
       cancelRef.current = false;
       realtimeHandled.current = false;
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      if (cancelRef.current) { stream.getTracks().forEach((track) => track.stop()); return; }
+      let recorder: MediaRecorder;
+      try {
+        recorder = new MediaRecorder(stream, recorderMimeType() ? { mimeType: recorderMimeType() } : undefined);
+      } catch (err) {
+        stream.getTracks().forEach((track) => track.stop());
+        throw err;
+      }
       mediaRecorder.current = recorder;
       audioChunks.current = [];
       const context = new AudioContext();
@@ -49,7 +61,7 @@ export const useAudioRecorder = (
         speechRecognition.current?.abort();
         speechRecognition.current = null;
         if (!cancelRef.current) {
-          const blob = new Blob(audioChunks.current, { type: 'audio/webm' });
+          const blob = new Blob(audioChunks.current, { type: recorder.mimeType || recorderMimeType() || 'audio/webm' });
           onStop(blob);
         }
         stream.getTracks().forEach((track) => track.stop());

@@ -72,6 +72,11 @@ export default defineConfig({
     fs: {
       strict: true,
     },
+    // On Replit the platform routes /api to the API server. Elsewhere, point API_PROXY_TARGET at it
+    // (e.g. http://localhost:8080) so the dev server forwards API calls.
+    ...(process.env.API_PROXY_TARGET
+      ? { proxy: { '/api': { target: process.env.API_PROXY_TARGET, changeOrigin: true } } }
+      : {}),
   },
   preview: {
     port,

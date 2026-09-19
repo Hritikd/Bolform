@@ -24,13 +24,13 @@ export const useImportForm = () => {
 
 export const useTranscribeAudio = () => {
   return useMutation({
-    mutationFn: async ({ blob }: { blob: Blob; language: string }) => {
+    mutationFn: async ({ blob, language }: { blob: Blob; language: string }) => {
       const response = await fetch('/api/bolform/transcribe', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/octet-stream',
           'X-Audio-Mime': blob.type || 'audio/webm',
-          'X-Language': 'auto',
+          'X-Language': language,
         },
         body: blob,
       });
@@ -39,8 +39,8 @@ export const useTranscribeAudio = () => {
         throw new Error('Failed to transcribe audio');
       }
 
-      const result = (await response.json()) as { transcript: string };
-      return { text: result.transcript };
+      const result = (await response.json()) as { transcript: string; detectedLanguage: string | null };
+      return { text: result.transcript, detectedLanguage: result.detectedLanguage };
     }
   });
 };
