@@ -1,19 +1,93 @@
-import { useState, useRef } from "react";
-import { UploadCloud, FileText, Bot, Languages, ArrowRight, Save, CheckCircle2, RotateCcw, AlertCircle, ArrowLeft, PauseCircle, Play } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { UploadCloud, FileText, Languages, ArrowRight, Save, CheckCircle2, RotateCcw, AlertCircle, ArrowLeft, PauseCircle, Play, Mic, FileType, AlignLeft, Loader2 } from "lucide-react";
 import { useGetBolformStatus, useGetBolformExamples, useParseFormText, useProcessConversationTurn, useSynthesizeSpeech } from "@workspace/api-client-react";
 import { useImportForm, useTranscribeAudio, useExportForm } from "../hooks/use-manual-apis";
 import type { FormSchema, FieldValue, ConversationInputLanguage, FieldPatch } from "@workspace/api-client-react";
 import { Button } from "../components/ui/button";
-import { Card, CardContent, CardFooter } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
-import { Badge } from "../components/ui/badge";
 import { useAudioRecorder } from "../hooks/use-audio-recorder";
 import { VoiceOrb, type VoiceState } from "../components/voice-orb";
 import { cn } from "../lib/utils";
 
 type SessionState = "setup" | "orientation" | "workspace" | "review";
+
+const TRANSLATIONS = {
+  'hi-IN': {
+    brandSubtitle: "फ़ॉर्म भरने की झंझट नहीं। बस बोलें।",
+    introText: "कोई भी फ़ॉर्म अपलोड करें। हम आपसे एक-एक करके जानकारी पूछेंगे और आपका PDF तैयार कर देंगे।",
+    privacy: "आपकी जानकारी सुरक्षित है। यह सिर्फ आपका PDF तैयार करता है।",
+    uploadLabel: "फ़ॉर्म अपलोड करें",
+    uploadSub: "PDF या फ़ोटो चुनें",
+    pasteLabel: "टेक्स्ट पेस्ट करें",
+    exampleLabel: "उदाहरण देखें",
+    reading: "फ़ॉर्म पढ़ा जा रहा है...",
+    start: "भरना शुरू करें",
+    totalFields: "कुल सवाल",
+    weWillAsk: "हम एक-एक करके आपसे पूछेंगे। बस सामान्य रूप से बोलें।",
+    pause: "रोकें",
+    resume: "बोलें",
+    undo: "पीछे जाएँ",
+    review: "जवाब जाँचे",
+    reviewTitle: "अपने जवाब जाँचे",
+    download: "PDF डाउनलोड करें",
+    downloading: "डाउनलोड हो रहा है...",
+    edit: "बदलें",
+    typeAnswer: "या टाइप करें...",
+    send: "भेजें",
+    listening: "सुन रहे हैं... बोलकर खत्म होने पर टैप करें।",
+    understanding: "समझ रहे हैं...",
+    pausedStatus: "रुका हुआ है। बोलने के लिए टैप करें।",
+    readyStatus: "तैयार है। बोलने के लिए टैप करें।",
+    iHeard: "हमने सुना:",
+    seeForm: "फ़ॉर्म देखें",
+    liveAnswers: "आपके जवाब",
+    originalDoc: "असली फ़ॉर्म",
+    step: (c: number, t: number) => `${t} में से ${c}`,
+    chooseFile: "फ़ाइल चुनें",
+    extracting: "निकाला जा रहा है...",
+    processText: "टेक्स्ट का उपयोग करें",
+    backToStart: "शुरुआत में जाएँ",
+    close: "बंद करें"
+  },
+  'en-IN': {
+    brandSubtitle: "Don't fill forms. Just speak.",
+    introText: "Upload any form. We'll ask for the details one by one and give you a ready-to-download PDF.",
+    privacy: "Nothing is submitted online. This safely prepares your PDF.",
+    uploadLabel: "Upload Form",
+    uploadSub: "Choose a PDF or Photo",
+    pasteLabel: "Paste Text",
+    exampleLabel: "Try Sample",
+    reading: "Reading Form...",
+    start: "Start filling",
+    totalFields: "Questions to answer",
+    weWillAsk: "We will ask you one by one. Just speak naturally.",
+    pause: "Pause",
+    resume: "Speak",
+    undo: "Undo",
+    review: "Review answers",
+    reviewTitle: "Review your answers",
+    download: "Download PDF",
+    downloading: "Downloading...",
+    edit: "Edit",
+    typeAnswer: "Or type your answer...",
+    send: "Send",
+    listening: "Listening... Tap when done.",
+    understanding: "Understanding...",
+    pausedStatus: "Paused. Tap to speak.",
+    readyStatus: "Ready. Tap to speak.",
+    iHeard: "I heard:",
+    seeForm: "See Form",
+    liveAnswers: "Live Answers",
+    originalDoc: "Original Document",
+    step: (c: number, t: number) => `${c} of ${t}`,
+    chooseFile: "Choose File",
+    extracting: "Extracting...",
+    processText: "Process Text",
+    backToStart: "Back to Start",
+    close: "Close"
+  }
+};
 
 export default function Home() {
   const { data: status, isLoading: isStatusLoading } = useGetBolformStatus();
@@ -26,11 +100,9 @@ export default function Home() {
   const [activeSchema, setActiveSchema] = useState<FormSchema | null>(null);
   const [fieldValues, setFieldValues] = useState<FieldValue[]>([]);
   
-  // Workspace state
   const [currentTurnId, setCurrentTurnId] = useState<string>("init");
   const [turnRevision, setTurnRevision] = useState<number>(0);
   
-  // History stack for Undo
   const historyStack = useRef<Array<{
     turnId: string, 
     revision: number,
@@ -42,7 +114,9 @@ export default function Home() {
   const [assistantAudioBase64, setAssistantAudioBase64] = useState<string | null>(null);
   const [typedReply, setTypedReply] = useState("");
   const [lastTranscript, setLastTranscript] = useState("");
-  const [mobileTab, setMobileTab] = useState<"agent" | "form">("agent");
+  const [showFormPreview, setShowFormPreview] = useState(false);
+  const [previewMode, setPreviewMode] = useState<"answers" | "original">("answers");
+  const [showTyping, setShowTyping] = useState(false);
 
   const processTurnMutation = useProcessConversationTurn();
   const synthesizeMutation = useSynthesizeSpeech();
@@ -54,6 +128,9 @@ export default function Home() {
   const [pasteText, setPasteText] = useState("");
   const activeRequest = useRef(0);
   const [sourcePreview, setSourcePreview] = useState<{ url: string; mime: string } | null>(null);
+  const [setupMode, setSetupMode] = useState<"upload" | "paste" | "examples">("upload");
+
+  const t = TRANSLATIONS[language];
 
   const { isRecording, startRecording, stopRecording } = useAudioRecorder(
     async (blob) => {
@@ -64,7 +141,7 @@ export default function Home() {
           setLastTranscript(res.text);
           processUserTurn(res.text);
         } else {
-          setVoiceError("I didn't catch that. Tap the orb to try again.");
+          setVoiceError(t.readyStatus);
           setVoiceState("idle");
         }
       } catch (err) {
@@ -77,10 +154,8 @@ export default function Home() {
       console.error("Audio error", err);
       setVoiceError(
         err.name === "NotAllowedError"
-          ? "Microphone permission was denied. Allow access in your browser settings, or type your answer."
-          : err.name === "NotFoundError"
-            ? "No microphone was found. Connect one or type your answer."
-            : "The microphone is unavailable. Try again or type your answer."
+          ? "Microphone permission denied. Allow access in your browser, or type your answer."
+          : "Microphone unavailable. Try again or type your answer."
       );
       setVoiceState("error");
     }
@@ -89,8 +164,8 @@ export default function Home() {
   if (isStatusLoading) {
     return (
       <div className="min-h-[100dvh] flex items-center justify-center bg-background">
-        <div className="animate-pulse text-muted-foreground font-medium text-lg flex items-center gap-3">
-          <Bot className="w-6 h-6" /> Checking provider status...
+        <div className="animate-pulse text-primary font-medium text-lg flex items-center gap-3">
+          <Loader2 className="w-6 h-6 animate-spin" /> Starting BolForm...
         </div>
       </div>
     );
@@ -100,14 +175,11 @@ export default function Home() {
   if (isBlocked) {
     return (
       <div className="min-h-[100dvh] flex items-center justify-center p-6 bg-background">
-        <Card className="max-w-md w-full border-destructive/20 shadow-lg p-6 text-center">
+        <div className="max-w-md w-full bg-white rounded-3xl shadow-sm border p-8 text-center">
           <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
           <h2 className="text-2xl font-bold mb-2">Service Unavailable</h2>
           <p className="text-destructive font-medium mb-4">{status.message || "Required AI providers are not fully configured or are blocked."}</p>
-          <p className="text-sm text-muted-foreground">
-            Please check your API keys for Document AI, LLM Chat, and Speech models.
-          </p>
-        </Card>
+        </div>
       </div>
     );
   }
@@ -122,14 +194,16 @@ export default function Home() {
     setTurnRevision(0);
     setVoiceState("idle");
     setVoiceError(null);
-    setMobileTab("agent");
+    setShowFormPreview(false);
+    setPreviewMode("answers");
+    setShowTyping(false);
   };
 
   const startVoiceSession = async () => {
     setSessionState("workspace");
     if (!activeSchema) return;
     const requiredCount = activeSchema.fields.filter((field) => field.required === "required").length;
-    const detailNames = activeSchema.fields.slice(0, 4).map((field) => field.label).join(", ");
+    const detailNames = activeSchema.fields.slice(0, 3).map((field) => field.label).join(", ");
     const initialQuestion = language === "hi-IN"
       ? `नमस्ते। यह ${activeSchema.title} फ़ॉर्म है। इसमें ${requiredCount || activeSchema.fields.length} ज़रूरी जानकारियाँ चाहिए, जैसे ${detailNames}। हम एक-एक करके सारी जानकारी भरेंगे। पहले अपना जवाब बताइए।`
       : `Hello. This is the ${activeSchema.title} form. It asks for ${requiredCount || activeSchema.fields.length} required details, including ${detailNames}. Let's go one at a time and fill everything together. Tell me your first answer when you're ready.`;
@@ -138,14 +212,14 @@ export default function Home() {
   };
 
   const playAssistantSpeech = async (text: string) => {
-    setVoiceState("understanding"); // Show processing while synthesizing
+    setVoiceState("understanding");
     try {
       const result = await synthesizeMutation.mutateAsync({ data: { text, language } });
       setAssistantAudioBase64(result.audioBase64);
       setVoiceState("speaking");
     } catch (err) {
       console.error("Failed to synthesize speech:", err);
-      setVoiceError("Failed to synthesize speech.");
+      setVoiceError("Audio issue.");
       setVoiceState("error");
     }
   };
@@ -185,7 +259,7 @@ export default function Home() {
   const submitTypedReply = (text: string) => {
     if (!text.trim()) return;
     if (voiceState === 'listening') {
-      stopRecording(true); // Cancel without transcription
+      stopRecording(true);
     }
     setAssistantAudioBase64(null);
     setTypedReply("");
@@ -198,7 +272,6 @@ export default function Home() {
     setVoiceState("understanding");
     setVoiceError(null);
     
-    // Save state to stack before mutating
     historyStack.current.push({
       turnId: currentTurnId,
       revision: turnRevision,
@@ -234,12 +307,8 @@ export default function Home() {
       }
     } catch (err) {
       console.error("Failed to process turn:", err);
-      const lastState = historyStack.current.pop();
-      if (lastState) {
-        // Rollback state if turn fails but don't revert UI question immediately
-        // Just show error
-      }
-      setVoiceError("I couldn't process that. Please try again.");
+      historyStack.current.pop();
+      setVoiceError("Network issue. Please try again.");
       setVoiceState("error");
     }
   };
@@ -310,360 +379,345 @@ export default function Home() {
     setSessionState("setup");
   };
 
-  const pauseAndReset = () => {
-    if (isRecording) stopRecording(true);
-    setAssistantAudioBase64(null);
-    setVoiceState("idle");
-    setSessionState("setup");
-  };
-
   return (
-    <div className="h-[100dvh] bg-background text-foreground flex flex-col font-sans overflow-hidden">
+    <div className="h-[100dvh] flex flex-col overflow-hidden relative selection:bg-primary/20">
+      
       {sessionState === "setup" && (
-        <div className="w-full max-w-5xl mx-auto p-6 md:p-12 h-full overflow-y-auto flex flex-col justify-center">
-          <div className="mb-14 text-center space-y-6">
-            <div className="inline-flex items-center justify-center p-4 bg-primary/10 rounded-3xl mb-2">
-              <Bot className="w-12 h-12 text-primary" />
-            </div>
-            <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-foreground">BolForm</h1>
-            <p className="text-2xl md:text-3xl font-semibold tracking-tight text-foreground">
-              Don&apos;t fill forms. Just speak.
-            </p>
-            <p className="text-muted-foreground text-lg md:text-xl max-w-3xl mx-auto leading-relaxed">
-              Upload any form. BolForm explains it, collects each answer in Hindi or English, and gives you a ready-to-download PDF.
-            </p>
-            <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm font-medium text-muted-foreground">
-              <span>Little to no typing</span>
-              <span className="hidden sm:inline text-primary">•</span>
-              <span>Review every answer</span>
-              <span className="hidden sm:inline text-primary">•</span>
-              <span>You decide when to download</span>
-            </div>
-            <div className="flex justify-center mt-6">
-              <div className="inline-flex items-center bg-card p-1.5 rounded-full shadow-sm border">
-                <Button 
-                  variant={language === "hi-IN" ? "default" : "ghost"} 
-                  onClick={() => setLanguage("hi-IN")}
-                  className="rounded-full px-8 font-medium text-base h-12"
-                >
-                  <Languages className="w-5 h-5 mr-2" /> हिन्दी
-                </Button>
-                <Button 
-                  variant={language === "en-IN" ? "default" : "ghost"} 
-                  onClick={() => setLanguage("en-IN")}
-                  className="rounded-full px-8 font-medium text-base h-12"
-                >
-                  English
-                </Button>
-              </div>
-            </div>
+        <div className="flex-1 overflow-y-auto px-4 py-8 md:p-12 flex flex-col items-center justify-center animate-in fade-in zoom-in-95 duration-700">
+          
+          <div className="absolute top-4 right-4 md:top-8 md:right-8 bg-white/50 backdrop-blur-sm p-1 rounded-full border shadow-sm flex items-center">
+            <button 
+              onClick={() => setLanguage("hi-IN")}
+              className={cn("px-4 py-2 text-sm font-semibold rounded-full transition-all", language === "hi-IN" ? "bg-primary text-white shadow-sm" : "text-muted-foreground hover:text-foreground")}
+            >
+              हिन्दी
+            </button>
+            <button 
+              onClick={() => setLanguage("en-IN")}
+              className={cn("px-4 py-2 text-sm font-semibold rounded-full transition-all", language === "en-IN" ? "bg-primary text-white shadow-sm" : "text-muted-foreground hover:text-foreground")}
+            >
+              English
+            </button>
           </div>
 
-          <Tabs defaultValue="upload" className="w-full max-w-3xl mx-auto">
-            <TabsList className="grid w-full grid-cols-3 mb-8 p-1.5 bg-muted/60 border rounded-2xl h-16">
-              <TabsTrigger value="upload" className="rounded-xl font-semibold text-base">Upload File</TabsTrigger>
-              <TabsTrigger value="paste" className="rounded-xl font-semibold text-base">Paste Text</TabsTrigger>
-              <TabsTrigger value="examples" className="rounded-xl font-semibold text-base">Examples</TabsTrigger>
-            </TabsList>
+          <div className="text-center max-w-xl mx-auto mb-10 mt-10">
+            <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-primary mb-3">BolForm</h1>
+            <p className="text-2xl font-semibold text-foreground mb-4">
+              {t.brandSubtitle}
+            </p>
+            <p className="text-muted-foreground text-lg leading-relaxed px-4">
+              {t.introText}
+            </p>
+          </div>
+
+          <div className="w-full max-w-sm space-y-4">
             
-            <TabsContent value="upload" className="focus:outline-none">
-              <Card className="border-dashed border-2 bg-transparent hover:bg-card/50 transition-colors shadow-none h-72 flex flex-col">
-                <CardContent className="flex flex-col items-center justify-center text-center flex-1 p-8">
-                  <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-6">
+            {setupMode === "upload" && (
+              <label className="cursor-pointer block relative group">
+                <div className="bg-white border-2 border-primary/20 hover:border-primary/50 transition-all rounded-3xl p-8 flex flex-col items-center justify-center text-center shadow-sm">
+                  <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                     <UploadCloud className="w-8 h-8 text-primary" />
                   </div>
-                  <h3 className="font-semibold text-xl mb-2">Upload a Form</h3>
-                  <p className="text-base text-muted-foreground mb-8 max-w-sm">
-                    Scan a PDF or image of your form up to 10MB.
-                  </p>
-                  <label className="cursor-pointer">
-                    <Button asChild size="lg" className="rounded-full px-10 h-14 text-base shadow-md">
-                      <span>{importFileMutation.isPending ? "Reading Form..." : "Choose File"}</span>
-                    </Button>
-                    <input 
-                      type="file" 
-                      className="hidden" 
-                      accept=".pdf,.png,.jpg,.jpeg"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          try {
-                            const schema = await importFileMutation.mutateAsync(file);
-                            initSession(schema, { url: URL.createObjectURL(file), mime: file.type });
-                          } catch (err) {
-                            console.error(err);
-                          }
-                        }
-                      }}
-                    />
-                  </label>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="paste" className="focus:outline-none">
-              <Card className="border shadow-sm bg-card">
-                <CardContent className="p-6">
-                  <Textarea 
-                    placeholder="Paste form text here..." 
-                    className="min-h-[220px] resize-none text-base p-6 bg-background rounded-xl border-input shadow-inner focus-visible:ring-primary mb-4"
-                    value={pasteText}
-                    onChange={(e) => setPasteText(e.target.value)}
-                  />
-                  <div className="flex justify-end">
-                    <Button 
-                      size="lg"
-                      className="rounded-full px-10 h-14 text-base shadow-md"
-                      disabled={!pasteText.trim() || parseTextMutation.isPending}
-                      onClick={async () => {
-                        try {
-                          const schema = await parseTextMutation.mutateAsync({ data: { text: pasteText } });
-                          initSession(schema);
-                        } catch (err) {
-                          console.error(err);
-                        }
-                      }}
-                    >
-                      {parseTextMutation.isPending ? "Extracting Fields..." : "Process Text"}
-                    </Button>
+                  <h3 className="font-bold text-xl mb-1 text-foreground">{t.uploadLabel}</h3>
+                  <p className="text-sm text-muted-foreground mb-4">{t.uploadSub}</p>
+                  <div className="bg-primary text-primary-foreground font-semibold px-6 py-3 rounded-full text-base shadow-sm w-full group-hover:bg-primary/90 transition-colors">
+                    {importFileMutation.isPending ? t.reading : t.chooseFile}
                   </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
+                </div>
+                <input 
+                  type="file" 
+                  className="hidden" 
+                  accept=".pdf,.png,.jpg,.jpeg"
+                  disabled={importFileMutation.isPending}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      try {
+                        const schema = await importFileMutation.mutateAsync(file);
+                        initSession(schema, { url: URL.createObjectURL(file), mime: file.type });
+                      } catch (err) {
+                        console.error(err);
+                      }
+                    }
+                  }}
+                />
+              </label>
+            )}
 
-            <TabsContent value="examples" className="focus:outline-none">
-              <ExamplesList onSelect={(schema) => initSession(schema, { url: `/api/bolform/examples/${schema.id}/pdf?preview=1`, mime: "application/pdf" })} />
-            </TabsContent>
-          </Tabs>
+            {setupMode === "paste" && (
+              <div className="bg-white border rounded-3xl p-6 shadow-sm animate-in fade-in">
+                <h3 className="font-bold text-lg mb-4">{t.pasteLabel}</h3>
+                <Textarea 
+                  placeholder="..."
+                  className="min-h-[160px] resize-none text-base p-4 bg-background rounded-2xl border-input focus-visible:ring-primary mb-4"
+                  value={pasteText}
+                  onChange={(e) => setPasteText(e.target.value)}
+                />
+                <Button 
+                  size="lg"
+                  className="w-full rounded-full h-14 text-base font-semibold shadow-sm"
+                  disabled={!pasteText.trim() || parseTextMutation.isPending}
+                  onClick={async () => {
+                    try {
+                      const schema = await parseTextMutation.mutateAsync({ data: { text: pasteText } });
+                      initSession(schema);
+                    } catch (err) {
+                      console.error(err);
+                    }
+                  }}
+                >
+                  {parseTextMutation.isPending ? t.extracting : t.processText}
+                </Button>
+              </div>
+            )}
+
+            {setupMode === "examples" && (
+              <div className="bg-white border rounded-3xl p-4 shadow-sm animate-in fade-in">
+                <ExamplesList onSelect={(schema) => initSession(schema, { url: `/api/bolform/examples/${schema.id}/pdf?preview=1`, mime: "application/pdf" })} />
+              </div>
+            )}
+
+            <div className="flex justify-center gap-4 pt-4">
+               {setupMode !== "upload" && (
+                 <button onClick={() => setSetupMode("upload")} className="text-sm font-semibold text-muted-foreground hover:text-primary transition-colors flex items-center">
+                   <UploadCloud className="w-4 h-4 mr-1.5" /> {t.uploadLabel}
+                 </button>
+               )}
+               {setupMode !== "examples" && (
+                 <button onClick={() => setSetupMode("examples")} className="text-sm font-semibold text-muted-foreground hover:text-primary transition-colors flex items-center">
+                   <FileType className="w-4 h-4 mr-1.5" /> {t.exampleLabel}
+                 </button>
+               )}
+               {setupMode !== "paste" && (
+                 <button onClick={() => setSetupMode("paste")} className="text-sm font-semibold text-muted-foreground hover:text-primary transition-colors flex items-center">
+                   <AlignLeft className="w-4 h-4 mr-1.5" /> {t.pasteLabel}
+                 </button>
+               )}
+            </div>
+
+            <p className="text-center text-xs font-medium text-muted-foreground pt-6 max-w-[260px] mx-auto">
+              <CheckCircle2 className="w-4 h-4 inline-block mr-1 text-primary/60" /> {t.privacy}
+            </p>
+          </div>
         </div>
       )}
 
       {sessionState === "orientation" && activeSchema && (
-        <div className="flex flex-col items-center justify-center min-h-[100dvh] p-8 text-center bg-slate-900 text-white animate-in fade-in zoom-in-95 duration-500">
-          <div className="w-24 h-24 bg-primary/20 rounded-full flex items-center justify-center mb-8 shadow-[0_0_40px_rgba(20,184,166,0.15)]">
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-500 max-w-lg mx-auto w-full">
+          <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mb-6 shadow-sm border border-primary/10">
             <FileText className="w-10 h-10 text-primary" />
           </div>
-          <h1 className="text-4xl md:text-5xl font-bold mb-6 tracking-tight">{activeSchema.title}</h1>
-          <p className="text-xl text-slate-300 mb-10 max-w-2xl leading-relaxed">{activeSchema.instructions || "Let's fill this out together."}</p>
+          <h1 className="text-3xl font-bold mb-4 text-foreground">{activeSchema.title}</h1>
+          <p className="text-lg text-muted-foreground mb-10 px-4">{t.weWillAsk}</p>
           
-          <div className="bg-slate-800/80 rounded-3xl p-8 mb-12 max-w-md w-full border border-slate-700/50 backdrop-blur-sm shadow-xl">
-            <div className="flex items-center justify-between mb-6 pb-6 border-b border-slate-700/50">
-              <span className="text-slate-400 font-medium">Total Fields to Complete</span>
-              <span className="font-bold text-2xl text-primary">{activeSchema.fields.length}</span>
-            </div>
-            <div className="text-left text-slate-300 text-base leading-relaxed space-y-4">
-              <p>BolForm will take you through this form one detail at a time.</p>
-              <p>Speak naturally. Your answers will appear in the form for you to review.</p>
-            </div>
+          <div className="bg-white rounded-3xl p-6 w-full border shadow-sm mb-12 flex justify-between items-center">
+            <span className="text-muted-foreground font-medium text-lg">{t.totalFields}</span>
+            <span className="font-bold text-3xl text-primary bg-primary/5 px-4 py-1 rounded-2xl">{activeSchema.fields.length}</span>
           </div>
 
           <Button 
             size="lg" 
-            className="h-16 px-12 text-xl rounded-full shadow-[0_0_20px_rgba(20,184,166,0.3)] hover:shadow-[0_0_30px_rgba(20,184,166,0.5)] transition-all font-semibold" 
+            className="w-full h-16 text-xl rounded-full shadow-md hover:shadow-lg transition-all font-bold" 
             onClick={startVoiceSession}
           >
-            Start filling
+            {t.start} <ArrowRight className="w-6 h-6 ml-2" />
+          </Button>
+
+          <Button variant="ghost" onClick={resetSession} className="mt-6 text-muted-foreground font-semibold">
+            {t.backToStart}
           </Button>
         </div>
       )}
 
       {sessionState === "workspace" && activeSchema && (
-        <div className="flex flex-col md:flex-row h-full w-full overflow-hidden animate-in fade-in duration-500">
+        <div className="flex-1 flex flex-col relative animate-in fade-in duration-500 bg-background">
           
-          {/* Mobile Tabs Switcher */}
-          <div className="md:hidden shrink-0 bg-slate-900 px-4 pt-6 pb-3">
-            <div className="flex bg-slate-800 rounded-xl p-1 gap-1 border border-slate-700/50">
-              <button 
-                className={cn("flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all", mobileTab === 'agent' ? "bg-slate-700 text-white shadow-sm" : "text-slate-400")}
-                onClick={() => setMobileTab('agent')}
+          {/* Header */}
+          <div className="px-4 md:px-8 py-4 flex items-center justify-between shrink-0 bg-background z-10 relative">
+            <Button variant="ghost" size="icon" onClick={resetSession} className="text-muted-foreground hover:text-foreground rounded-full h-10 w-10 bg-white/50 backdrop-blur-sm border shadow-sm">
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
+            <div className="font-semibold text-primary bg-white border px-5 py-2 rounded-full shadow-sm text-sm">
+               {t.step(fieldValues.length, activeSchema.fields.length)}
+            </div>
+            <div className="w-10 flex items-center justify-end">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={handleUndo} 
+                disabled={historyStack.current.length === 0 || voiceState === 'understanding'}
+                className="text-muted-foreground hover:text-foreground rounded-full h-10 w-10 bg-white/50 backdrop-blur-sm border shadow-sm disabled:opacity-30"
               >
-                BolForm
-              </button>
-              <button 
-                className={cn("flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all flex items-center justify-center gap-2", mobileTab === 'form' ? "bg-slate-700 text-white shadow-sm" : "text-slate-400")}
-                onClick={() => setMobileTab('form')}
-              >
-                Form <span className="bg-primary/20 text-primary-foreground px-2 py-0.5 rounded-full text-xs">{fieldValues.length}/{activeSchema.fields.length}</span>
-              </button>
+                <RotateCcw className="w-4 h-4" />
+              </Button>
             </div>
           </div>
 
-          {/* Voice Panel */}
-          <div className={cn(
-            "w-full md:w-[45%] lg:w-[40%] flex flex-col bg-slate-900 text-slate-50 relative shrink-0 transition-all z-10 shadow-2xl",
-            mobileTab !== 'agent' ? "hidden md:flex" : "flex flex-1 md:flex-none"
-          )}>
-            <div className="p-4 md:p-6 flex justify-between items-center shrink-0 w-full border-b border-slate-800/80">
-              <Button variant="ghost" size="icon" onClick={pauseAndReset} className="text-slate-400 hover:text-white hover:bg-slate-800 rounded-full">
-                <ArrowLeft className="w-5 h-5" />
-              </Button>
-              <div className="flex gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={voiceState === "paused" ? startRecordingWrapper : pauseVoiceSession}
-                  disabled={voiceState === "understanding"}
-                  className="text-slate-400 hover:text-white hover:bg-slate-800 rounded-full px-4 font-medium"
-                >
-                  {voiceState === "paused" ? <Play className="w-4 h-4 mr-2" /> : <PauseCircle className="w-4 h-4 mr-2" />}
-                  {voiceState === "paused" ? "Resume" : "Pause"}
-                </Button>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={handleUndo} 
-                  disabled={historyStack.current.length === 0 || voiceState === 'understanding'}
-                  className="text-slate-400 hover:text-white hover:bg-slate-800 rounded-full px-4 font-medium"
-                >
-                  <RotateCcw className="w-4 h-4 mr-2" /> Undo
-                </Button>
-                <Button 
-                  variant="secondary" 
-                  size="sm" 
-                  onClick={() => setSessionState("review")}
-                  className="bg-primary/20 text-primary-foreground hover:bg-primary/30 border-none rounded-full px-5 font-semibold"
-                >
-                  Review <ArrowRight className="w-4 h-4 ml-1.5" />
-                </Button>
-              </div>
-            </div>
-
-            <div className="flex-1 flex flex-col items-center justify-center p-6 space-y-12 overflow-y-auto">
-              <div className="w-full flex justify-center">
-                 <VoiceOrb 
-                   state={voiceState} 
-                   audioBase64={assistantAudioBase64} 
-                   onAudioEnded={handleAssistantAudioEnded} 
-                   onClick={handleOrbClick}
-                 />
-              </div>
-
-              <div className="text-center w-full max-w-sm space-y-4">
-                {voiceState === 'error' ? (
-                  <div className="text-destructive-foreground bg-destructive/90 p-4 rounded-2xl shadow-lg font-medium animate-in slide-in-from-bottom-2">
-                    {voiceError || "An error occurred."}
-                  </div>
-                ) : (
-                  <h2 className="text-2xl md:text-3xl font-medium leading-snug tracking-tight text-white animate-in fade-in slide-in-from-bottom-2">
-                    {currentQuestion}
-                  </h2>
-                )}
-                
-                <div className="h-6 flex items-center justify-center mt-4">
-                  {voiceState === 'listening' && <p className="text-slate-400 animate-pulse text-sm font-medium">Listening... Tap orb when done.</p>}
-                  {voiceState === 'understanding' && <p className="text-slate-400 animate-pulse text-sm font-medium">Understanding...</p>}
-                  {voiceState === 'paused' && <p className="text-slate-400 text-sm font-medium">Paused. Tap orb to resume.</p>}
-                  {voiceState === 'idle' && !voiceError && <p className="text-slate-400 text-sm font-medium">Ready. Tap orb to speak.</p>}
-                </div>
-                {lastTranscript && (
-                  <p className="text-sm text-slate-300 bg-slate-800/80 border border-slate-700/60 rounded-2xl px-4 py-3">
-                    <span className="text-slate-500">I heard: </span>{lastTranscript}
-                  </p>
-                )}
-              </div>
-            </div>
+          {/* Main Content */}
+          <div className="flex-1 flex flex-col items-center justify-center p-6 space-y-10 overflow-y-auto relative z-10 pb-32">
             
-            <div className="p-4 md:p-6 bg-slate-900 border-t border-slate-800 shrink-0">
-              <div className="flex gap-3 max-w-lg mx-auto w-full">
+            <div className="text-center w-full max-w-xl mx-auto space-y-3 min-h-[140px] flex flex-col justify-end">
+              {voiceState === 'error' ? (
+                <div className="text-destructive font-semibold bg-destructive/10 p-5 rounded-3xl border border-destructive/20 animate-in slide-in-from-bottom-2 text-lg">
+                  {voiceError}
+                </div>
+              ) : (
+                <h2 className="text-2xl md:text-4xl font-bold leading-tight tracking-tight text-foreground animate-in fade-in slide-in-from-bottom-2">
+                  {currentQuestion}
+                </h2>
+              )}
+            </div>
+
+            <div className="w-full flex justify-center py-4">
+               <VoiceOrb 
+                 state={voiceState} 
+                 audioBase64={assistantAudioBase64} 
+                 onAudioEnded={handleAssistantAudioEnded} 
+                 onClick={handleOrbClick}
+               />
+            </div>
+
+            <div className="h-10 flex flex-col items-center justify-center w-full">
+              {voiceState === 'listening' && <p className="text-primary font-semibold animate-pulse text-base">{t.listening}</p>}
+              {voiceState === 'understanding' && <p className="text-primary font-semibold animate-pulse text-base">{t.understanding}</p>}
+              {voiceState === 'paused' && <p className="text-muted-foreground font-semibold text-base">{t.pausedStatus}</p>}
+              {voiceState === 'idle' && !voiceError && <p className="text-muted-foreground font-semibold text-base">{t.readyStatus}</p>}
+              
+              {lastTranscript && voiceState !== 'understanding' && (
+                <p className="text-sm text-foreground bg-white border rounded-full px-4 py-2 mt-4 shadow-sm animate-in fade-in max-w-md truncate">
+                  <span className="text-muted-foreground font-medium">{t.iHeard} </span>{lastTranscript}
+                </p>
+              )}
+            </div>
+
+          </div>
+          
+          {/* Bottom Area: Typed Fallback & Actions */}
+          <div className="absolute bottom-0 inset-x-0 p-4 md:p-6 bg-gradient-to-t from-background via-background to-transparent z-20 flex flex-col items-center gap-4">
+            
+            {showTyping ? (
+              <div className="w-full max-w-md flex gap-2 animate-in fade-in slide-in-from-bottom-2">
                 <Input 
-                  placeholder="Or type your answer..." 
+                  placeholder={t.typeAnswer} 
                   value={typedReply}
+                  autoFocus
                   onChange={(e) => setTypedReply(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') submitTypedReply(typedReply);
-                  }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') submitTypedReply(typedReply); }}
                   disabled={voiceState === 'understanding'}
-                  className="h-14 bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 rounded-2xl focus-visible:ring-primary shadow-inner text-base px-5"
+                  className="h-14 bg-white border-border rounded-full focus-visible:ring-primary shadow-sm text-base px-6 font-medium"
                 />
                 <Button 
-                  size="lg"
+                  size="icon"
                   onClick={() => submitTypedReply(typedReply)}
                   disabled={!typedReply.trim() || voiceState === 'understanding'}
-                  className="h-14 px-8 rounded-2xl font-semibold shadow-md"
+                  className="h-14 w-14 rounded-full font-semibold shadow-sm shrink-0"
                 >
-                  Send
+                  <ArrowRight className="w-6 h-6" />
                 </Button>
               </div>
-            </div>
-          </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowTyping(true)}
+                className="text-sm font-semibold text-muted-foreground hover:text-primary transition-colors flex items-center gap-2 py-1"
+              >
+                <AlignLeft className="w-4 h-4" />
+                {t.typeAnswer.replace("...", "")}
+              </button>
+            )}
 
-          {/* Form Panel */}
-          <div className={cn(
-            "w-full md:flex-1 flex flex-col bg-background min-w-0 transition-all",
-            mobileTab !== 'form' ? "hidden md:flex" : "flex flex-1 md:flex-none"
-          )}>
-            <div className="px-6 md:px-8 py-5 border-b bg-card flex items-center justify-between shrink-0 shadow-sm z-10">
-              <h3 className="font-semibold text-lg flex items-center gap-3 text-foreground">
-                 <FileText className="w-5 h-5 text-muted-foreground" /> {activeSchema.title}
-              </h3>
-              <div className="text-sm font-semibold text-primary bg-primary/10 px-4 py-1.5 rounded-full hidden md:block">
-                 {fieldValues.length} / {activeSchema.fields.length} filled
+            <div className="flex gap-4 w-full max-w-md">
+               <Button variant="outline" className="flex-1 rounded-full font-semibold h-12 bg-white/80 backdrop-blur" onClick={() => setShowFormPreview(true)}>
+                 {t.seeForm}
+               </Button>
+               <Button className="flex-1 rounded-full font-bold h-12 shadow-sm" onClick={() => setSessionState("review")}>
+                 {t.review} <ArrowRight className="w-4 h-4 ml-1.5" />
+               </Button>
+            </div>
+            
+          </div>
+          
+          {/* Progressive Disclosure: Form Preview Overlay */}
+          {showFormPreview && (
+            <div className="absolute inset-0 bg-background z-50 flex flex-col animate-in slide-in-from-bottom-4">
+               <div className="px-4 py-3 flex items-center justify-between border-b bg-white gap-3">
+                  <div className="flex items-center gap-1 bg-muted rounded-full p-1">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewMode("answers")}
+                      className={cn("px-4 py-2 rounded-full text-sm font-semibold transition-colors", previewMode === "answers" ? "bg-white text-primary shadow-sm" : "text-muted-foreground")}
+                    >
+                      {t.liveAnswers}
+                    </button>
+                    {sourcePreview && (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewMode("original")}
+                        className={cn("px-4 py-2 rounded-full text-sm font-semibold transition-colors", previewMode === "original" ? "bg-white text-primary shadow-sm" : "text-muted-foreground")}
+                      >
+                        {t.originalDoc}
+                      </button>
+                    )}
+                  </div>
+                 <Button variant="ghost" size="sm" onClick={() => setShowFormPreview(false)} className="rounded-full font-semibold">
+                   {t.close}
+                 </Button>
+              </div>
+              <div className="flex-1 overflow-y-auto bg-muted/30">
+                  {previewMode === "answers" || !sourcePreview ? (
+                    <FormPreview schema={activeSchema} values={fieldValues} onValueChange={handleManualValueChange} />
+                  ) : sourcePreview.mime.startsWith("image/") ? (
+                    <img src={sourcePreview.url} alt={t.originalDoc} className="w-full h-full object-contain p-4" />
+                  ) : (
+                    <iframe src={sourcePreview.url} title={t.originalDoc} className="w-full h-full border-0" />
+                  )}
               </div>
             </div>
-            <div className="flex-1 overflow-hidden flex flex-col bg-muted/20 relative">
-              <Tabs defaultValue="form" className="flex flex-1 min-h-0 flex-col">
-                {sourcePreview && (
-                  <div className="px-6 py-3 bg-card border-b shrink-0 flex justify-center">
-                    <TabsList className="bg-muted">
-                      <TabsTrigger value="form" className="rounded-lg px-6 font-medium">Live Answers</TabsTrigger>
-                      <TabsTrigger value="original" className="rounded-lg px-6 font-medium">Original Document</TabsTrigger>
-                    </TabsList>
-                  </div>
-                )}
-                <TabsContent value="form" className="flex-1 min-h-0 mt-0 data-[state=active]:flex flex-col">
-                   <FormPreview schema={activeSchema} values={fieldValues} onValueChange={handleManualValueChange} />
-                </TabsContent>
-                {sourcePreview && (
-                  <TabsContent value="original" className="flex-1 min-h-0 mt-0 p-6 data-[state=active]:flex flex-col">
-                    {sourcePreview.mime.startsWith("image/") ? (
-                      <img src={sourcePreview.url} alt="Original form" className="w-full h-full object-contain rounded-2xl bg-card border shadow-sm" />
-                    ) : (
-                      <iframe src={sourcePreview.url} title="Original form preview" className="w-full h-full rounded-2xl border bg-card shadow-sm" />
-                    )}
-                  </TabsContent>
-                )}
-              </Tabs>
-            </div>
-          </div>
+          )}
 
         </div>
       )}
 
       {sessionState === "review" && activeSchema && (
-        <div className="w-full max-w-4xl mx-auto p-6 md:p-12 h-full overflow-y-auto animate-in fade-in duration-500">
-          <div className="text-center mb-12">
-            <div className="w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
-              <CheckCircle2 className="w-12 h-12 text-primary" />
+        <div className="flex-1 overflow-y-auto w-full max-w-3xl mx-auto p-4 md:p-8 animate-in fade-in duration-500 bg-background pb-32">
+          
+          <div className="flex items-center justify-between mb-8 mt-4">
+            <Button variant="ghost" size="icon" onClick={() => setSessionState("workspace")} className="rounded-full bg-white border shadow-sm text-muted-foreground">
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
+            <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
+              <CheckCircle2 className="w-6 h-6 text-primary" />
             </div>
-            <h1 className="text-3xl md:text-4xl font-bold mb-4 tracking-tight">Review Your Form</h1>
-            <p className="text-muted-foreground text-lg md:text-xl max-w-lg mx-auto">
-              Please check your answers. You can make final edits before exporting the PDF.
+            <div className="w-10" />
+          </div>
+
+          <div className="text-center mb-10">
+            <h1 className="text-3xl font-bold mb-3">{t.reviewTitle}</h1>
+            <p className="text-muted-foreground font-medium">
+              {t.privacy}
             </p>
           </div>
           
-          <Card className="shadow-lg border-border bg-card overflow-hidden mb-10 rounded-3xl">
-            <div className="max-h-[50dvh] overflow-y-auto bg-card">
-              <FormPreview 
-                schema={activeSchema} 
-                values={fieldValues} 
-                onValueChange={handleManualValueChange}
-              />
-            </div>
-          </Card>
+          <div className="bg-white rounded-3xl shadow-sm border overflow-hidden mb-8">
+            <FormPreview 
+              schema={activeSchema} 
+              values={fieldValues} 
+              onValueChange={handleManualValueChange}
+            />
+          </div>
 
-          <div className="flex flex-col sm:flex-row justify-center gap-4">
-            <Button variant="outline" size="lg" className="rounded-full px-10 h-14 text-base font-semibold" onClick={() => setSessionState("workspace")}>
-              Back to BolForm
-            </Button>
-            <Button 
-              size="lg" 
-              className="rounded-full px-10 h-14 text-base shadow-md font-semibold" 
-              onClick={handleExport} 
-              disabled={exportFormMutation.isPending}
-            >
-              <Save className="w-5 h-5 mr-2.5" />
-              {exportFormMutation.isPending ? "Exporting PDF..." : "Export as PDF"}
-            </Button>
+          <div className="fixed bottom-0 inset-x-0 p-4 md:p-6 bg-gradient-to-t from-background via-background to-transparent z-20 flex justify-center">
+            <div className="w-full max-w-xl">
+              <Button 
+                size="lg" 
+                className="w-full rounded-full h-16 text-xl shadow-md font-bold" 
+                onClick={handleExport} 
+                disabled={exportFormMutation.isPending}
+              >
+                <Save className="w-6 h-6 mr-3" />
+                {exportFormMutation.isPending ? t.downloading : t.download}
+              </Button>
+            </div>
           </div>
         </div>
       )}
@@ -674,36 +728,19 @@ export default function Home() {
 function ExamplesList({ onSelect }: { onSelect: (schema: FormSchema) => void }) {
   const { data: examples, isLoading } = useGetBolformExamples();
   
-  if (isLoading) return <div className="text-center py-20 text-muted-foreground animate-pulse text-lg font-medium">Loading examples...</div>;
-  if (!examples?.length) return <div className="text-center py-20 text-muted-foreground text-lg">No examples available right now.</div>;
+  if (isLoading) return <div className="text-center py-12 text-primary animate-pulse font-semibold">Loading...</div>;
+  if (!examples?.length) return <div className="text-center py-12 text-muted-foreground">No examples available.</div>;
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[400px] overflow-y-auto p-1">
+    <div className="grid gap-3 max-h-[300px] overflow-y-auto">
       {examples.map((ex) => (
-        <Card key={ex.id} className="cursor-pointer hover:border-primary/50 hover:shadow-md transition-all group overflow-hidden bg-card border-border rounded-2xl" onClick={() => onSelect(ex)}>
-          <CardContent className="p-6">
-            <div className="flex justify-between items-start gap-4 mb-4">
-              <h3 className="font-semibold text-lg leading-snug group-hover:text-primary transition-colors">{ex.title}</h3>
-              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center shrink-0">
-                <FileText className="w-5 h-5 text-muted-foreground" />
-              </div>
-            </div>
-            <p className="line-clamp-2 text-sm text-muted-foreground leading-relaxed mb-6">{ex.instructions}</p>
-            <div className="flex items-center justify-between mt-auto">
-              <Badge variant="secondary" className="font-medium bg-muted/80 text-foreground px-3 py-1 rounded-full">
-                {ex.fields.length} fields
-              </Badge>
-              <a
-                href={`/api/bolform/examples/${ex.id}/pdf`}
-                download
-                onClick={(event) => event.stopPropagation()}
-                className="text-sm font-semibold text-primary hover:underline underline-offset-4 focus:outline-none"
-              >
-                View Blank PDF
-              </a>
-            </div>
-          </CardContent>
-        </Card>
+        <button key={ex.id} className="text-left w-full p-4 rounded-2xl bg-muted/40 hover:bg-primary/5 transition-colors border border-transparent hover:border-primary/20 flex flex-col gap-2" onClick={() => onSelect(ex)}>
+          <div className="flex justify-between items-center w-full">
+            <h3 className="font-bold text-foreground text-lg">{ex.title}</h3>
+            <span className="text-xs font-bold bg-white px-2 py-1 rounded-full border">{ex.fields.length}</span>
+          </div>
+          <p className="text-sm text-muted-foreground line-clamp-2">{ex.instructions}</p>
+        </button>
       ))}
     </div>
   );
@@ -715,7 +752,7 @@ function FormPreview({ schema, values, onValueChange }: {
   onValueChange: (id: string, val: string) => void 
 }) {
   return (
-    <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6 bg-transparent">
+    <div className="p-4 md:p-8 space-y-4">
       {schema.fields.map((field) => {
         const valEntry = values.find(v => v.fieldId === field.id);
         const valString = valEntry?.value as string || "";
@@ -723,24 +760,21 @@ function FormPreview({ schema, values, onValueChange }: {
 
         return (
           <div key={field.id} className={cn(
-            "p-5 md:p-6 rounded-2xl transition-all border",
-            isFilled ? "bg-card border-border shadow-sm" : "bg-muted/40 border-dashed border-border/70 hover:bg-muted/60"
+            "p-5 rounded-2xl transition-all",
+            isFilled ? "bg-white border shadow-sm" : "bg-muted/50 border border-dashed"
           )}>
-            <label className="block text-sm font-semibold mb-1.5 text-foreground">
+            <label className="block text-sm font-bold mb-2 text-foreground">
               {field.label}
-              {field.required === 'required' && <span className="text-destructive ml-1.5">*</span>}
+              {field.required === 'required' && <span className="text-destructive ml-1">*</span>}
             </label>
-            {field.instructions && (
-              <p className="text-sm text-muted-foreground mb-4 leading-relaxed max-w-[90%]">{field.instructions}</p>
-            )}
             
             {field.type === 'multiline' ? (
               <Textarea 
                 value={valString}
                 onChange={(e) => onValueChange(field.id, e.target.value)}
-                placeholder="Awaiting answer..."
+                placeholder="..."
                 className={cn(
-                  "resize-none min-h-[100px] text-base bg-background shadow-none border-input rounded-xl focus-visible:ring-primary", 
+                  "resize-none min-h-[80px] text-base bg-background shadow-inner border-none rounded-xl focus-visible:ring-2 focus-visible:ring-primary font-medium", 
                   !isFilled && "opacity-70"
                 )}
               />
@@ -748,9 +782,9 @@ function FormPreview({ schema, values, onValueChange }: {
               <Input 
                 value={valString}
                 onChange={(e) => onValueChange(field.id, e.target.value)}
-                placeholder="Awaiting answer..."
+                placeholder="..."
                 className={cn(
-                  "h-12 text-base bg-background shadow-none border-input rounded-xl focus-visible:ring-primary", 
+                  "h-12 text-base bg-background shadow-inner border-none rounded-xl focus-visible:ring-2 focus-visible:ring-primary font-medium", 
                   !isFilled && "opacity-70"
                 )}
               />

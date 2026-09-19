@@ -113,12 +113,12 @@ export const VoiceOrb: React.FC<VoiceOrbProps> = ({ state, audioBase64, onAudioE
 
     ctx.beginPath();
     ctx.arc(centerX, centerY, baseRadius, 0, 2 * Math.PI);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.fillStyle = 'rgba(25, 102, 85, 0.1)'; // primary color with low opacity
     ctx.fill();
 
     for (let i = 0; i < dataArrayRef.current.length; i++) {
       const value = dataArrayRef.current[i];
-      const barHeight = (value / 255) * 35;
+      const barHeight = (value / 255) * 30;
       
       const rads = (i * 2 * Math.PI) / dataArrayRef.current.length;
       
@@ -130,7 +130,7 @@ export const VoiceOrb: React.FC<VoiceOrbProps> = ({ state, audioBase64, onAudioE
       ctx.beginPath();
       ctx.moveTo(x1, y1);
       ctx.lineTo(x2, y2);
-      ctx.strokeStyle = `rgba(255, 255, 255, ${0.4 + (value / 255) * 0.6})`;
+      ctx.strokeStyle = `rgba(25, 102, 85, ${0.3 + (value / 255) * 0.7})`; // primary color scaling opacity
       ctx.lineWidth = 4;
       ctx.lineCap = 'round';
       ctx.stroke();
@@ -140,9 +140,9 @@ export const VoiceOrb: React.FC<VoiceOrbProps> = ({ state, audioBase64, onAudioE
   return (
     <div 
       className={cn(
-        "relative flex items-center justify-center w-48 h-48 rounded-full transition-all duration-700 select-none",
-        (state === 'idle' || state === 'paused') ? 'cursor-pointer hover:scale-105 active:scale-95' : '',
-        state === 'listening' ? 'cursor-pointer scale-105 active:scale-95' : '',
+        "relative flex items-center justify-center w-40 h-40 rounded-full transition-all duration-700 select-none",
+        (state === 'idle' || state === 'paused') ? 'cursor-pointer hover:scale-[1.02] active:scale-[0.98]' : '',
+        state === 'listening' ? 'cursor-pointer scale-[1.05] active:scale-95' : '',
         className
       )}
       onClick={onClick}
@@ -158,35 +158,35 @@ export const VoiceOrb: React.FC<VoiceOrbProps> = ({ state, audioBase64, onAudioE
     >
       {/* Background layer */}
       <div className={cn(
-        "absolute inset-4 rounded-full transition-colors duration-700",
-        (state === 'idle' || state === 'paused') ? 'bg-white/10' : '',
-        state === 'listening' ? 'bg-primary/30' : '',
-        state === 'understanding' ? 'bg-white/10' : '',
+        "absolute inset-4 rounded-full transition-all duration-700 shadow-sm",
+        (state === 'idle' || state === 'paused') ? 'bg-primary/10 border-2 border-primary/20' : '',
+        state === 'listening' ? 'bg-primary border-4 border-primary/40' : '',
+        state === 'understanding' ? 'bg-primary/5' : '',
         state === 'speaking' ? 'bg-transparent' : '',
-        state === 'error' ? 'bg-destructive/20' : ''
+        state === 'error' ? 'bg-destructive/10 border-2 border-destructive/20' : ''
       )} />
 
       {/* Glow effects */}
       {state === 'listening' && (
         <>
-          <div className="absolute inset-2 rounded-full border-2 border-primary animate-ping opacity-30 duration-1000" />
-          <div className="absolute inset-4 rounded-full border-2 border-primary/50 animate-pulse" />
+          <div className="absolute inset-0 rounded-full border border-primary/30 animate-ping opacity-60 duration-[1.5s]" />
+          <div className="absolute inset-2 rounded-full border border-primary/20 animate-pulse duration-[2s]" />
         </>
       )}
       {state === 'understanding' && (
-        <div className="absolute inset-2 rounded-full border-2 border-t-transparent border-white/30 animate-spin duration-1000" />
+        <div className="absolute inset-4 rounded-full border-2 border-t-transparent border-primary/30 animate-spin duration-1000" />
       )}
 
       {/* Inner Icon */}
       <div className="relative z-10 flex items-center justify-center pointer-events-none">
-        {state === 'idle' && <Mic className="w-10 h-10 text-white/60 transition-colors" />}
-        {state === 'paused' && <Pause className="w-10 h-10 text-white/60 transition-colors" />}
-        {state === 'listening' && <div className="w-6 h-6 rounded-sm bg-primary animate-pulse" />}
-        {state === 'understanding' && <Loader2 className="w-10 h-10 text-white/80 animate-spin" />}
+        {state === 'idle' && <Mic className="w-10 h-10 text-primary/80 transition-colors" />}
+        {state === 'paused' && <Pause className="w-10 h-10 text-primary/80 transition-colors" />}
+        {state === 'listening' && <div className="w-5 h-5 rounded-sm bg-white animate-pulse" />}
+        {state === 'understanding' && <Loader2 className="w-10 h-10 text-primary/60 animate-spin" />}
         {state === 'speaking' && (
           <canvas ref={canvasRef} width={200} height={200} className="absolute inset-1/2 -translate-x-1/2 -translate-y-1/2" />
         )}
-        {state === 'error' && <AlertCircle className="w-10 h-10 text-destructive" />}
+        {state === 'error' && <AlertCircle className="w-10 h-10 text-destructive/80" />}
       </div>
     </div>
   );
