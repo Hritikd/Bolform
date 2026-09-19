@@ -1,0 +1,1 @@
+- [Sarvam structured calls](sarvam-structured-calls.md) — Chat reasoning budgets and Document AI nested schema descriptions need explicit handling.

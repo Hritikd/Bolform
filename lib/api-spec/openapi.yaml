@@ -1,36 +1,187 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: BolForm API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
-    description: Health operations
+  - name: bolform
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
-      summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
           content:
             application/json:
+              schema: { $ref: "#/components/schemas/HealthStatus" }
+  /bolform/status:
+    get:
+      operationId: getBolformStatus
+      tags: [bolform]
+      responses:
+        "200":
+          description: Provider and capability status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProviderStatus" }
+  /bolform/examples:
+    get:
+      operationId: getBolformExamples
+      tags: [bolform]
+      responses:
+        "200":
+          description: Fictional sample forms
+          content:
+            application/json:
               schema:
-                $ref: "#/components/schemas/HealthStatus"
+                type: array
+                items: { $ref: "#/components/schemas/FormSchema" }
+  /bolform/parse-text:
+    post:
+      operationId: parseFormText
+      tags: [bolform]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ParseTextInput" }
+      responses:
+        "200":
+          description: Parsed schema
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FormSchema" }
+  /bolform/turn:
+    post:
+      operationId: processConversationTurn
+      tags: [bolform]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConversationInput" }
+      responses:
+        "200":
+          description: Validated conversational update
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConversationResult" }
+  /bolform/speak:
+    post:
+      operationId: synthesizeSpeech
+      tags: [bolform]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SpeechInput" }
+      responses:
+        "200":
+          description: Base64 audio
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpeechResult" }
 components:
   schemas:
     HealthStatus:
       type: object
       properties:
-        status:
-          type: string
-      required:
-        - status
-
+        status: { type: string }
+      required: [status]
+    ProviderStatus:
+      type: object
+      properties:
+        configured: { type: boolean }
+        chat: { type: string, enum: [ready, blocked, unchecked] }
+        speech: { type: string, enum: [ready, blocked, unchecked] }
+        transcription: { type: string, enum: [ready, blocked, unchecked] }
+        documentAi: { type: string, enum: [ready, blocked, unchecked] }
+        message: { type: string }
+      required: [configured, chat, speech, transcription, documentAi, message]
+    FormField:
+      type: object
+      properties:
+        id: { type: string }
+        label: { type: string }
+        type: { type: string, enum: [short_text, multiline, date, number, email, phone, select, checkbox] }
+        options: { type: array, items: { type: string } }
+        required: { type: string, enum: [required, optional, unknown] }
+        instructions: { type: string }
+        constraint: { type: string }
+      required: [id, label, type, options, required, instructions, constraint]
+    FormSchema:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        sourceLanguage: { type: string }
+        instructions: { type: string }
+        fictional: { type: boolean }
+        fields:
+          type: array
+          maxItems: 25
+          items: { $ref: "#/components/schemas/FormField" }
+      required: [id, title, sourceLanguage, instructions, fictional, fields]
+    ParseTextInput:
+      type: object
+      properties:
+        text: { type: string, minLength: 3, maxLength: 12000 }
+      required: [text]
+    FieldValue:
+      type: object
+      properties:
+        fieldId: { type: string }
+        value: {}
+        status: { type: string, enum: [answered, needs_confirmation, skipped] }
+      required: [fieldId, value, status]
+    ConversationInput:
+      type: object
+      properties:
+        turnId: { type: string }
+        revision: { type: integer, minimum: 0 }
+        language: { type: string, enum: [hi-IN, en-IN] }
+        utterance: { type: string, minLength: 1, maxLength: 2000 }
+        currentQuestion: { type: string, maxLength: 1000 }
+        schema: { $ref: "#/components/schemas/FormSchema" }
+        values:
+          type: array
+          items: { $ref: "#/components/schemas/FieldValue" }
+      required: [turnId, revision, language, utterance, currentQuestion, schema, values]
+    FieldPatch:
+      type: object
+      properties:
+        fieldId: { type: string }
+        value: {}
+        status: { type: string, enum: [answered, needs_confirmation, skipped] }
+        evidence: { type: string }
+      required: [fieldId, value, status, evidence]
+    ConversationResult:
+      type: object
+      properties:
+        turnId: { type: string }
+        revision: { type: integer }
+        reply: { type: string }
+        nextQuestion: { type: string }
+        patches:
+          type: array
+          items: { $ref: "#/components/schemas/FieldPatch" }
+        complete: { type: boolean }
+      required: [turnId, revision, reply, nextQuestion, patches, complete]
+    SpeechInput:
+      type: object
+      properties:
+        text: { type: string, minLength: 1, maxLength: 500 }
+        language: { type: string, enum: [hi-IN, en-IN] }
+      required: [text, language]
+    SpeechResult:
+      type: object
+      properties:
+        audioBase64: { type: string }
+        mimeType: { type: string }
+      required: [audioBase64, mimeType]

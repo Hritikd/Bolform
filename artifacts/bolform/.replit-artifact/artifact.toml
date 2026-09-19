@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "BolForm"
+description = "A full-stack voice-guided form assistant that helps people complete English forms by speaking naturally in Hindi or English, review corrections, and download a completed PDF."
+version = "1.0.0"
+id = "artifacts/bolform"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19769
+
+[services.development]
+run = "pnpm --filter @workspace/bolform run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/bolform", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/bolform/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19769"
+BASE_PATH = "/"
