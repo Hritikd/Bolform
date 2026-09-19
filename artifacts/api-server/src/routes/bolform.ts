@@ -1,9 +1,10 @@
 import express, { Router, type IRouter } from "express";
+import { Readable } from "node:stream";
 import {
   GetBolformExamplesResponse, GetBolformStatusResponse, ParseFormTextBody, ParseFormTextResponse,
   ProcessConversationTurnBody, ProcessConversationTurnResponse, SynthesizeSpeechBody, SynthesizeSpeechResponse,
 } from "@workspace/api-zod";
-import { conversationTurn, documentExtract, examples, exportResponse, inspectNativePdf, makeExamplePdf, parseTextWithSarvam, speechToText, textToSpeech } from "../lib/bolform";
+import { conversationTurn, documentExtract, examples, exportResponse, inspectNativePdf, makeExamplePdf, parseTextWithSarvam, speechToText, streamTextToSpeech, textToSpeech } from "../lib/bolform";
 
 const router: IRouter = Router();
 const buckets = new Map<string, { count: number; reset: number }>();
@@ -48,6 +49,27 @@ router.post("/bolform/speak", async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: "That prompt cannot be spoken." }); return; }
   try { res.json(SynthesizeSpeechResponse.parse({ audioBase64: await textToSpeech(parsed.data.text, parsed.data.language), mimeType: "audio/wav" })); }
   catch (error) { req.log.warn({ err: error }, "Speech synthesis failed"); res.status(502).json({ error: "Audio is unavailable right now. The question remains visible." }); }
+});
+
+router.get("/bolform/speak-stream", async (req, res): Promise<void> => {
+  const text = String(req.query.text ?? "").trim();
+  const language = String(req.query.language ?? "hi-IN");
+  if (!text || text.length > 500 || !["hi-IN", "en-IN"].includes(language)) {
+    res.status(400).json({ error: "That prompt cannot be spoken." });
+    return;
+  }
+  try {
+    const upstream = await streamTextToSpeech(text, language);
+    if (!upstream.body) throw new Error("Speech stream returned no audio");
+    res.status(200);
+    res.setHeader("Content-Type", upstream.headers.get("content-type") || "audio/mpeg");
+    res.setHeader("Cache-Control", "private, max-age=300");
+    Readable.fromWeb(upstream.body as any).pipe(res);
+  } catch (error) {
+    req.log.warn({ err: error }, "Streaming speech synthesis failed");
+    if (!res.headersSent) res.status(502).json({ error: "Audio is unavailable right now. The question remains visible." });
+    else res.end();
+  }
 });
 
 router.post("/bolform/transcribe", expressRaw(12 * 1024 * 1024), async (req, res): Promise<void> => {

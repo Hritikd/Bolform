@@ -87,6 +87,25 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SpeechResult" }
+  /bolform/speak-stream:
+    get:
+      operationId: streamSpeech
+      tags: [bolform]
+      parameters:
+        - in: query
+          name: text
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 500 }
+        - in: query
+          name: language
+          required: true
+          schema: { type: string, enum: [hi-IN, en-IN] }
+      responses:
+        "200":
+          description: Streaming MP3 audio
+          content:
+            audio/mpeg:
+              schema: { type: string, format: binary }
 components:
   schemas:
     HealthStatus:

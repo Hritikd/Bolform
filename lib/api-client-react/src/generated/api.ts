@@ -27,7 +27,8 @@ import type {
   ParseTextInput,
   ProviderStatus,
   SpeechInput,
-  SpeechResult
+  SpeechResult,
+  StreamSpeechParams
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -515,4 +516,82 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getSynthesizeSpeechMutationOptions(options));
     }
+
+export const getStreamSpeechUrl = (params: StreamSpeechParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/bolform/speak-stream?${stringifiedParams}` : `/api/bolform/speak-stream`
+}
+
+export const streamSpeech = async (params: StreamSpeechParams, options?: Parameters<typeof customFetch>[1]): Promise<Blob> => {
+
+  return customFetch<Blob>(getStreamSpeechUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getStreamSpeechQueryKey = (params?: StreamSpeechParams,) => {
+    return [
+    `/api/bolform/speak-stream`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getStreamSpeechQueryOptions = <TData = Awaited<ReturnType<typeof streamSpeech>>, TError = ErrorType<unknown>>(params: StreamSpeechParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof streamSpeech>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getStreamSpeechQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof streamSpeech>>> = ({ signal }) => streamSpeech(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof streamSpeech>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type StreamSpeechQueryResult = NonNullable<Awaited<ReturnType<typeof streamSpeech>>>
+export type StreamSpeechQueryError = ErrorType<unknown>
+
+
+
+export function useStreamSpeech<TData = Awaited<ReturnType<typeof streamSpeech>>, TError = ErrorType<unknown>>(
+ params: StreamSpeechParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof streamSpeech>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getStreamSpeechQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 

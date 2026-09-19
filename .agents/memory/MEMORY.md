@@ -1,1 +1,2 @@
 - [Sarvam structured calls](sarvam-structured-calls.md) — Chat reasoning budgets and Document AI nested schema descriptions need explicit handling.
+- [BolForm latency budget](bolform-latency-budget.md) — protect the guided fast path and measure first response separately from compatibility fallbacks.

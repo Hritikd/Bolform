@@ -27,3 +27,5 @@ export * from './providerStatusTranscription';
 export * from './speechInput';
 export * from './speechInputLanguage';
 export * from './speechResult';
+export * from './streamSpeechLanguage';
+export * from './streamSpeechParams';

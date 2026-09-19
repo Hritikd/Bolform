@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Mic, Loader2, AlertCircle, Pause } from 'lucide-react';
+import { Mic, Loader2, AlertCircle, Pause, Volume2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export type VoiceState = "idle" | "listening" | "understanding" | "speaking" | "paused" | "error";
@@ -7,12 +7,13 @@ export type VoiceState = "idle" | "listening" | "understanding" | "speaking" | "
 interface VoiceOrbProps {
   state: VoiceState;
   audioBase64?: string | null;
+  audioUrl?: string | null;
   onAudioEnded?: () => void;
   onClick?: () => void;
   className?: string;
 }
 
-export const VoiceOrb: React.FC<VoiceOrbProps> = ({ state, audioBase64, onAudioEnded, onClick, className }) => {
+export const VoiceOrb: React.FC<VoiceOrbProps> = ({ state, audioBase64, audioUrl, onAudioEnded, onClick, className }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -20,10 +21,33 @@ export const VoiceOrb: React.FC<VoiceOrbProps> = ({ state, audioBase64, onAudioE
   const reqFrameRef = useRef<number>(0);
   const dataArrayRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
   const onAudioEndedRef = useRef(onAudioEnded);
+  const streamingAudioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     onAudioEndedRef.current = onAudioEnded;
   }, [onAudioEnded]);
+
+  useEffect(() => {
+    if (state !== 'speaking' || !audioUrl) {
+      streamingAudioRef.current?.pause();
+      streamingAudioRef.current = null;
+      return;
+    }
+
+    const audio = new Audio(audioUrl);
+    audio.preload = 'auto';
+    streamingAudioRef.current = audio;
+    audio.onended = () => onAudioEndedRef.current?.();
+    audio.onerror = () => onAudioEndedRef.current?.();
+    void audio.play().catch(() => onAudioEndedRef.current?.());
+
+    return () => {
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.load();
+      if (streamingAudioRef.current === audio) streamingAudioRef.current = null;
+    };
+  }, [audioUrl, state]);
 
   useEffect(() => {
     if (state !== 'speaking' || !audioBase64) {
@@ -176,6 +200,12 @@ export const VoiceOrb: React.FC<VoiceOrbProps> = ({ state, audioBase64, onAudioE
       {state === 'understanding' && (
         <div className="absolute inset-4 rounded-full border-2 border-t-transparent border-primary/30 animate-spin duration-1000" />
       )}
+      {state === 'speaking' && audioUrl && (
+        <>
+          <div className="absolute inset-3 rounded-full bg-primary/10 animate-pulse" />
+          <div className="absolute inset-0 rounded-full border border-primary/20 animate-ping opacity-30" />
+        </>
+      )}
 
       {/* Inner Icon */}
       <div className="relative z-10 flex items-center justify-center pointer-events-none">
@@ -183,7 +213,8 @@ export const VoiceOrb: React.FC<VoiceOrbProps> = ({ state, audioBase64, onAudioE
         {state === 'paused' && <Pause className="w-10 h-10 text-primary/80 transition-colors" />}
         {state === 'listening' && <div className="w-5 h-5 rounded-sm bg-white animate-pulse" />}
         {state === 'understanding' && <Loader2 className="w-10 h-10 text-primary/60 animate-spin" />}
-        {state === 'speaking' && (
+        {state === 'speaking' && audioUrl && <Volume2 className="w-10 h-10 text-primary" />}
+        {state === 'speaking' && !audioUrl && (
           <canvas ref={canvasRef} width={200} height={200} className="absolute inset-1/2 -translate-x-1/2 -translate-y-1/2" />
         )}
         {state === 'error' && <AlertCircle className="w-10 h-10 text-destructive/80" />}

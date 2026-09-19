@@ -3,7 +3,12 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 export const useAudioRecorder = (
   onStop: (blob: Blob) => void,
   onError: (err: Error) => void,
-  maxSeconds = 25
+  maxSeconds = 25,
+  realtime?: {
+    language: string;
+    onInterimTranscript?: (text: string) => void;
+    onFinalTranscript: (text: string) => void;
+  }
 ) => {
   const [isRecording, setIsRecording] = useState(false);
   const [timeLeft, setTimeLeft] = useState(maxSeconds);
@@ -13,10 +18,13 @@ export const useAudioRecorder = (
   const cancelRef = useRef(false);
   const vadFrame = useRef<number | null>(null);
   const audioContext = useRef<AudioContext | null>(null);
+  const speechRecognition = useRef<any>(null);
+  const realtimeHandled = useRef(false);
 
   const startRecording = useCallback(async () => {
     try {
       cancelRef.current = false;
+      realtimeHandled.current = false;
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
       mediaRecorder.current = recorder;
@@ -38,6 +46,8 @@ export const useAudioRecorder = (
         vadFrame.current = null;
         void audioContext.current?.close();
         audioContext.current = null;
+        speechRecognition.current?.abort();
+        speechRecognition.current = null;
         if (!cancelRef.current) {
           const blob = new Blob(audioChunks.current, { type: 'audio/webm' });
           onStop(blob);
@@ -48,6 +58,43 @@ export const useAudioRecorder = (
       recorder.start();
       setIsRecording(true);
       setTimeLeft(maxSeconds);
+
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition && realtime) {
+        const recognition = new SpeechRecognition();
+        recognition.lang = realtime.language;
+        recognition.continuous = false;
+        recognition.interimResults = true;
+        recognition.maxAlternatives = 1;
+        recognition.onresult = (event: any) => {
+          let interim = "";
+          for (let index = event.resultIndex; index < event.results.length; index += 1) {
+            const result = event.results[index];
+            const transcript = String(result[0]?.transcript ?? "").trim();
+            if (!transcript) continue;
+            if (result.isFinal && !realtimeHandled.current) {
+              realtimeHandled.current = true;
+              cancelRef.current = true;
+              realtime.onFinalTranscript(transcript);
+              if (recorder.state !== "inactive") recorder.stop();
+              if (timer.current) clearInterval(timer.current);
+              setIsRecording(false);
+              return;
+            }
+            interim = `${interim} ${transcript}`.trim();
+          }
+          if (interim) realtime.onInterimTranscript?.(interim);
+        };
+        recognition.onerror = () => {
+          speechRecognition.current = null;
+        };
+        speechRecognition.current = recognition;
+        try {
+          recognition.start();
+        } catch {
+          speechRecognition.current = null;
+        }
+      }
 
       const levels = new Uint8Array(analyser.fftSize) as Uint8Array<ArrayBuffer>;
       const startedAt = performance.now();
@@ -92,7 +139,7 @@ export const useAudioRecorder = (
       console.error('Error starting audio recording:', err);
       onError(err instanceof Error ? err : new Error(String(err)));
     }
-  }, [maxSeconds, onStop, onError]);
+  }, [maxSeconds, onStop, onError, realtime]);
 
   const stopRecording = useCallback((cancel = false) => {
     cancelRef.current = cancel;
@@ -106,6 +153,8 @@ export const useAudioRecorder = (
       cancelAnimationFrame(vadFrame.current);
       vadFrame.current = null;
     }
+    speechRecognition.current?.abort();
+    speechRecognition.current = null;
     setIsRecording(false);
   }, []);
 

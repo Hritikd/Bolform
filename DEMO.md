@@ -2,26 +2,34 @@
 
 ## 90-second demonstration
 
-1. Open the BolForm preview. Point out: “Your words. Your language. Your form, filled.” and the Hindi helper line.
+1. Open the BolForm preview. Point out: “फ़ॉर्म भरने की झंझट नहीं। बस बोलें।” / “Don’t fill forms. Just speak.”
 2. Keep **हिन्दी** selected. Open **Examples** and choose the fictional school admission enquiry.
-3. Select **Start filling**. BolForm explains what the form is for, names the kinds of details it needs, and says it will proceed one at a time. After it finishes speaking, say:  
-   “मेरी बेटी का नाम अनन्या शर्मा है। उसे छठी कक्षा में दाखिला चाहिए। हम अभी जयपुर में रहते हैं, लेकिन दाखिला पुणे में चाहिए। मेरा नाम कविता शर्मा है।”
-4. Stop speaking normally. BolForm detects the pause, processes the answer, fills five fields, speaks the next question, and automatically listens again.
-5. Say: “माफ़ कीजिए, छठी नहीं, सातवीं कक्षा।” Show that only class changes to 7.
-6. Say: “मेरा नंबर 12345 है।” Show that the number is not accepted and BolForm asks for 10 digits.
-7. Use a clearly fictional 10-digit number and add a preferred contact time. Pause, open review, edit one answer if useful, and export the PDF.
+3. Select **Start filling**. BolForm explains what the form is for and says it will proceed one detail at a time. After it asks for the student name, say: “अनन्या शर्मा।”
+4. Stop speaking normally. Show that the name appears immediately and the next spoken question starts without waiting for a complete audio download.
+5. Answer each short question directly: “सातवीं”, “कविता शर्मा”, “जयपुर”, and “पुणे”.
+6. When asked for a phone number, say: “12345।” Show that it is rejected immediately and BolForm asks for 10 digits.
+7. Use a clearly fictional 10-digit number and add a preferred contact time. Pause, open review, edit one answer to demonstrate corrections, and export the PDF.
 8. Reset. Paste a small unrelated form or choose the volunteer example to demonstrate that the question set is generic.
 
 ## Live verification completed
 
 - Sarvam chat: a Hindi school-enquiry answer populated five relevant fields.
 - Sarvam correction: “छठी नहीं, सातवीं” proposed only the class field update.
-- Sarvam TTS: Bulbul v3 returned a valid 22.05 kHz mono WAV.
+- Sarvam streaming TTS: Bulbul v3 begins returning MP3 audio before the complete response is generated.
 - Sarvam STT: Saaras v3 transcribed the synthetic Hindi TTS recording correctly.
 - Sarvam Document AI: the generated non-fillable volunteer PDF produced six blank-field definitions.
 - Native PDF: the generated fillable school PDF exposed eight AcroForm bindings and exported as a valid PDF.
 
 These are live API checks, not mocked provider results. Synthetic TTS-to-STT proves the API pipeline, not recognition quality in a real room.
+
+## Latency verification
+
+- Common one-answer form updates: **1–10 ms** measured server response time
+- Short spoken prompt first byte: **171–470 ms** across repeated checks
+- Longer Hindi introduction first byte: **488 ms** while the remaining audio continued streaming
+- Supported Chrome/Android browsers use live browser transcription to avoid waiting for a completed recording upload
+- Sarvam batch transcription remains the compatibility fallback and can take longer than 600 ms
+- Complex corrections or multi-field sentences intentionally use the reasoning model and can take longer; keep the live demo to the guided one-answer-at-a-time path
 
 ## Local checks
 

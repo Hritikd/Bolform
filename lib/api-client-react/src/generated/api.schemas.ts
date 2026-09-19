@@ -191,3 +191,20 @@ export interface SpeechResult {
   mimeType: string;
 }
 
+export type StreamSpeechParams = {
+/**
+ * @minLength 1
+ * @maxLength 500
+ */
+text: string;
+language: StreamSpeechLanguage;
+};
+
+export type StreamSpeechLanguage = typeof StreamSpeechLanguage[keyof typeof StreamSpeechLanguage];
+
+
+export const StreamSpeechLanguage = {
+  'hi-IN': 'hi-IN',
+  'en-IN': 'en-IN',
+} as const;
+

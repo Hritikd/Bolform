@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { UploadCloud, FileText, Languages, ArrowRight, Save, CheckCircle2, RotateCcw, AlertCircle, ArrowLeft, PauseCircle, Play, Mic, FileType, AlignLeft, Loader2 } from "lucide-react";
-import { useGetBolformStatus, useGetBolformExamples, useParseFormText, useProcessConversationTurn, useSynthesizeSpeech } from "@workspace/api-client-react";
+import { useGetBolformStatus, useGetBolformExamples, useParseFormText, useProcessConversationTurn } from "@workspace/api-client-react";
 import { useImportForm, useTranscribeAudio, useExportForm } from "../hooks/use-manual-apis";
 import type { FormSchema, FieldValue, ConversationInputLanguage, FieldPatch } from "@workspace/api-client-react";
 import { Button } from "../components/ui/button";
@@ -111,7 +111,7 @@ export default function Home() {
   }>>([]);
 
   const [currentQuestion, setCurrentQuestion] = useState<string>("");
-  const [assistantAudioBase64, setAssistantAudioBase64] = useState<string | null>(null);
+  const [assistantAudioUrl, setAssistantAudioUrl] = useState<string | null>(null);
   const [typedReply, setTypedReply] = useState("");
   const [lastTranscript, setLastTranscript] = useState("");
   const [showFormPreview, setShowFormPreview] = useState(false);
@@ -119,7 +119,6 @@ export default function Home() {
   const [showTyping, setShowTyping] = useState(false);
 
   const processTurnMutation = useProcessConversationTurn();
-  const synthesizeMutation = useSynthesizeSpeech();
   const transcribeMutation = useTranscribeAudio();
   const parseTextMutation = useParseFormText();
   const importFileMutation = useImportForm();
@@ -158,7 +157,16 @@ export default function Home() {
           : "Microphone unavailable. Try again or type your answer."
       );
       setVoiceState("error");
-    }
+    },
+    25,
+    {
+      language,
+      onInterimTranscript: (text) => setLastTranscript(text),
+      onFinalTranscript: (text) => {
+        setLastTranscript(text);
+        processUserTurn(text);
+      },
+    },
   );
 
   if (isStatusLoading) {
@@ -212,16 +220,9 @@ export default function Home() {
   };
 
   const playAssistantSpeech = async (text: string) => {
-    setVoiceState("understanding");
-    try {
-      const result = await synthesizeMutation.mutateAsync({ data: { text, language } });
-      setAssistantAudioBase64(result.audioBase64);
-      setVoiceState("speaking");
-    } catch (err) {
-      console.error("Failed to synthesize speech:", err);
-      setVoiceError("Audio issue.");
-      setVoiceState("error");
-    }
+    const params = new URLSearchParams({ text, language });
+    setAssistantAudioUrl(`/api/bolform/speak-stream?${params.toString()}`);
+    setVoiceState("speaking");
   };
 
   const handleAssistantAudioEnded = () => {
@@ -240,7 +241,7 @@ export default function Home() {
   const pauseVoiceSession = () => {
     activeRequest.current += 1;
     if (isRecording) stopRecording(true);
-    setAssistantAudioBase64(null);
+    setAssistantAudioUrl(null);
     setVoiceState("paused");
     setVoiceError(null);
   };
@@ -251,7 +252,7 @@ export default function Home() {
     } else if (voiceState === 'idle' || voiceState === 'paused' || voiceState === 'error') {
       startRecordingWrapper();
     } else if (voiceState === 'speaking') {
-      setAssistantAudioBase64(null);
+      setAssistantAudioUrl(null);
       setVoiceState('paused');
     }
   };
@@ -261,7 +262,7 @@ export default function Home() {
     if (voiceState === 'listening') {
       stopRecording(true);
     }
-    setAssistantAudioBase64(null);
+    setAssistantAudioUrl(null);
     setTypedReply("");
     setLastTranscript(text);
     processUserTurn(text);
@@ -318,7 +319,7 @@ export default function Home() {
     const lastState = historyStack.current.pop();
     if (lastState) {
       if (voiceState === 'listening') stopRecording(true);
-      setAssistantAudioBase64(null);
+      setAssistantAudioUrl(null);
       setCurrentTurnId(lastState.turnId);
       setTurnRevision(lastState.revision);
       setCurrentQuestion(lastState.question);
@@ -366,7 +367,7 @@ export default function Home() {
   const resetSession = () => {
     activeRequest.current += 1;
     if (isRecording) stopRecording(true);
-    setAssistantAudioBase64(null);
+    setAssistantAudioUrl(null);
     setActiveSchema(null);
     setFieldValues([]);
     setCurrentQuestion("");
@@ -571,7 +572,7 @@ export default function Home() {
             <div className="w-full flex justify-center py-4">
                <VoiceOrb 
                  state={voiceState} 
-                 audioBase64={assistantAudioBase64} 
+                 audioUrl={assistantAudioUrl} 
                  onAudioEnded={handleAssistantAudioEnded} 
                  onClick={handleOrbClick}
                />

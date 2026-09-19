@@ -146,3 +146,15 @@ export const SynthesizeSpeechResponse = zod.object({
 })
 
 
+export const streamSpeechQueryTextMax = 500;
+
+
+
+export const StreamSpeechQueryParams = zod.object({
+  "text": zod.coerce.string().min(1).max(streamSpeechQueryTextMax),
+  "language": zod.enum(['hi-IN', 'en-IN'])
+})
+
+export const StreamSpeechResponse = zod.unknown()
+
+

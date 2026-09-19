@@ -77,7 +77,7 @@ function extractJson(text: string): unknown {
   return JSON.parse(cleaned);
 }
 
-export async function chatJson(system: string, user: string): Promise<unknown> {
+export async function chatJson(system: string, user: string, maxTokens = 3000): Promise<unknown> {
   const response = await sarvam("/v1/chat/completions", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -85,7 +85,7 @@ export async function chatJson(system: string, user: string): Promise<unknown> {
       model: CHAT_MODEL,
       temperature: 0.1,
       reasoning_effort: "low",
-      max_tokens: 3000,
+      max_tokens: maxTokens,
       messages: [{ role: "system", content: system }, { role: "user", content: user }],
       response_format: { type: "json_object" },
     }),
@@ -123,9 +123,19 @@ export async function conversationTurn(input: any): Promise<any> {
       complete: false,
     };
   }
+
+  const fastResult = fastSingleFieldTurn(input);
+  if (fastResult) return fastResult;
+
   const raw = await chatJson(
     `You are BolForm, a patient form-filling assistant. The user speaks ${input.language}. Extract only facts explicitly supported by the latest utterance. Preserve proper names. Handle corrections by replacing only the corrected field. Return JSON only: {"reply":"short localized acknowledgement","nextQuestion":"one short localized question","patches":[{"fieldId":"known id","value":string|number|boolean,"status":"answered|needs_confirmation|skipped","evidence":"exact relevant phrase"}],"complete":boolean}. Never invent data. Unknown/ambiguous information gets no patch. Ask one missing required question at a time. Hindi user replies and questions should be in Hindi, while values must match the English form where practical.`,
-    JSON.stringify({ schema: input.schema, currentValues: input.values, currentQuestion: input.currentQuestion, latestUtterance: input.utterance }),
+    JSON.stringify({
+      fields: input.schema.fields.map(({ id, label, type, options, required, constraint }: FormField) => ({ id, label, type, options, required, constraint })),
+      currentValues: input.values,
+      currentQuestion: input.currentQuestion,
+      latestUtterance: input.utterance,
+    }),
+    450,
   ) as any;
   const patches = Array.isArray(raw.patches) ? raw.patches.filter((p: any) => allowed.has(p.fieldId) && typeof p.evidence === "string" && p.evidence.length > 0) : [];
   const valid: any[] = [];
@@ -158,6 +168,65 @@ export async function conversationTurn(input: any): Promise<any> {
   };
 }
 
+function fastSingleFieldTurn(input: any): any | null {
+  const utterance = String(input.utterance ?? "").trim();
+  if (!utterance || utterance.length > 120) return null;
+  if (/[,;\n]|(?:\b(?:and|also|but|actually|change|correct|instead)\b)|(?:और|साथ|लेकिन|असल|बदल|सुधार|गलत)/iu.test(utterance)) return null;
+
+  const answered = new Set(
+    (input.values ?? [])
+      .filter((value: any) => value.status === "answered" && String(value.value ?? "").trim())
+      .map((value: any) => value.fieldId),
+  );
+  const required = input.schema.fields.filter((field: FormField) => field.required === "required");
+  const target = required.find((field: FormField) => !answered.has(field.id))
+    ?? input.schema.fields.find((field: FormField) => !answered.has(field.id));
+  if (!target) return null;
+
+  let value: string | number | boolean = utterance;
+  if (target.type === "email") {
+    const email = utterance.replace(/\s+(?:at|एट)\s+/giu, "@").replace(/\s+(?:dot|डॉट)\s+/giu, ".").replace(/\s/g, "");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
+    value = email;
+  } else if (target.type === "phone") {
+    const digits = utterance.replace(/\D/g, "");
+    if (target.constraint.includes("10") && digits.length !== 10) return null;
+    value = digits || utterance;
+  } else if (target.type === "number") {
+    const parsed = Number(utterance.replace(/,/g, ""));
+    if (!Number.isFinite(parsed)) return null;
+    value = parsed;
+  } else if (target.type === "select") {
+    const normalized = utterance.toLocaleLowerCase();
+    const option = target.options.find((item: string) => {
+      const candidate = item.toLocaleLowerCase();
+      return normalized === candidate || normalized.includes(candidate);
+    });
+    if (!option) return null;
+    value = option;
+  } else if (target.type === "checkbox") {
+    if (/^(?:yes|yeah|true|हाँ|हां|जी)$/iu.test(utterance)) value = true;
+    else if (/^(?:no|false|नहीं|नही)$/iu.test(utterance)) value = false;
+    else return null;
+  }
+
+  answered.add(target.id);
+  const next = required.find((field: FormField) => !answered.has(field.id));
+  const revision = input.revision + 1;
+  return {
+    turnId: `${input.turnId.split("-")[0]}-${revision}`,
+    revision,
+    reply: input.language === "hi-IN" ? "ठीक है।" : "Got it.",
+    nextQuestion: next
+      ? input.language === "hi-IN"
+        ? `अब ${next.label} बताइए।`
+        : `What is your ${next.label}?`
+      : "",
+    patches: [{ fieldId: target.id, value, status: "answered", evidence: utterance }],
+    complete: !next,
+  };
+}
+
 export async function textToSpeech(text: string, language: string): Promise<string> {
   const response = await sarvam("/text-to-speech", {
     method: "POST",
@@ -167,6 +236,21 @@ export async function textToSpeech(text: string, language: string): Promise<stri
   const data = await response.json() as { audios?: string[] };
   if (!data.audios?.[0]) throw new Error("Sarvam TTS returned no audio");
   return data.audios[0];
+}
+
+export async function streamTextToSpeech(text: string, language: string): Promise<Response> {
+  return sarvam("/text-to-speech/stream", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      model: "bulbul:v3",
+      text,
+      language_code: language,
+      speaker: "shubh",
+      output_audio_codec: "mp3",
+      enable_cached_responses: true,
+    }),
+  });
 }
 
 export async function speechToText(bytes: Uint8Array, mime: string, language: string): Promise<string> {
