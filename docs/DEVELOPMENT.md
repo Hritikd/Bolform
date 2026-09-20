@@ -108,7 +108,9 @@ pnpm run typecheck
 PORT=5173 BASE_PATH=/ pnpm run build
 ```
 
-The build command also runs type-checking. For API changes, edit `lib/api-spec/openapi.yaml` first, then regenerate the clients:
+The build command also runs type-checking. GitHub Actions runs the same build on Linux with Node.js 24 and pnpm 10. It requires no provider key; compilation does not verify speech recognition or model behavior.
+
+For API changes, edit `lib/api-spec/openapi.yaml` first, then regenerate the clients:
 
 ```bash
 pnpm --filter @workspace/api-spec run codegen
